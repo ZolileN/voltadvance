@@ -174,7 +174,41 @@ function LiveTicker({ target }: { target: number }) {
 }
 
 export default function DashboardPage() {
-  const m = mockDashboardMetrics;
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/dashboard');
+        const json = await res.json();
+        setData(json);
+      } catch (e) {
+        console.error('Failed to load dashboard data:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (loading && !data) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--text-secondary)' }}>
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+          <div className="pulse-dot" style={{ margin: '0 auto var(--space-4) auto', float: 'none' }} />
+          <p className="section-title">Loading VoltAdvance Console...</p>
+          <p className="section-subtitle">Aggregating utility ledger telemetry</p>
+        </div>
+      </div>
+    );
+  }
+
+  const m = data?.metrics || mockDashboardMetrics;
+  const recentEvents = data?.events || mockSystemEvents;
+  const charts = data?.charts || { advanceVolumeData, riskDistributionData, channelRecoveryData };
 
   return (
     <div className={styles.page}>
@@ -227,7 +261,7 @@ export default function DashboardPage() {
               Live
             </span>
           </div>
-          <AreaChart data={advanceVolumeData} />
+          <AreaChart data={charts.advanceVolumeData} />
         </div>
 
         <div className={`card ${styles.riskCard}`}>
@@ -237,7 +271,7 @@ export default function DashboardPage() {
               <p className="section-subtitle">Trust score distribution</p>
             </div>
           </div>
-          <DonutChart data={riskDistributionData} />
+          <DonutChart data={charts.riskDistributionData} />
         </div>
       </div>
 
@@ -249,7 +283,7 @@ export default function DashboardPage() {
             <p className="section-subtitle">Success rate per vending partner (80–100%)</p>
           </div>
         </div>
-        <BarChart data={channelRecoveryData} />
+        <BarChart data={charts.channelRecoveryData} />
       </div>
 
       {/* Transaction Stream */}
@@ -265,7 +299,7 @@ export default function DashboardPage() {
           </span>
         </div>
         <div className={styles.eventStream}>
-          {mockSystemEvents.map((event) => {
+          {recentEvents.map((event: any) => {
             const cfg = eventTypeConfig[event.event_type] || { badge: 'badge-neutral', label: event.event_type };
             return (
               <div key={event.id} className={styles.eventRow}>

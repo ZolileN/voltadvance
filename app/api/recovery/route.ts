@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateRecovery } from '@/lib/recovery-engine';
+import { db } from '@/lib/db';
 
 // POST /api/recovery
 // Called by vending integration layer when electricity purchase occurs
@@ -21,24 +22,69 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // In production: query Supabase for active advances on this meter
-    // For now: simulate with mock outstanding
-    const mockOutstanding = 11000; // R110 in cents
-    const hasLinkedBorrower = true;
+    // Step 1: Look up meter
+    let meter = await db.getMeterByNumber(meter_number);
+    if (!meter) {
+      // Auto-create meter if not exists to facilitate testing
+      meter = await db.createMeter({
+        meter_number,
+        provider_name: 'City Power',
+        status: 'ACTIVE',
+      });
+    }
 
+    // Step 2: Fetch active/partially repaid advances for this meter
+    const activeAdvances = await db.getActiveAdvancesForMeter(meter.id);
+    const outstanding_cents = activeAdvances.reduce((sum, a) => sum + a.outstanding_cents, 0);
+    const hasLinkedBorrower = activeAdvances.length > 0;
+
+    // Step 3: Run recovery engine math
     const result = calculateRecovery({
       purchase_amount_cents,
-      outstanding_cents: mockOutstanding,
+      outstanding_cents,
       has_linked_borrower: hasLinkedBorrower,
       is_borrower_purchasing,
       consent_granted: true,
     });
 
-    // In production:
-    // 1. Update advance.outstanding_cents in Supabase
-    // 2. Insert recovery_transaction record
-    // 3. Insert system_event record
-    // 4. Return electricity token value to vending system
+    let remainingRecovery = result.debt_recovered_cents;
+
+    // Step 4: Apply repayment deductions sequentially to active advances
+    for (const advance of activeAdvances) {
+      if (remainingRecovery <= 0) break;
+
+      const deduction = Math.min(advance.outstanding_cents, remainingRecovery);
+      remainingRecovery -= deduction;
+
+      const newOutstanding = advance.outstanding_cents - deduction;
+      const newStatus = newOutstanding <= 0 ? 'SETTLED' : 'PARTIALLY_REPAID';
+
+      // Update advance in database
+      await db.updateAdvanceRepayment(advance.id, deduction, newStatus);
+
+      // Create recovery transaction record
+      const recoveryTx = await db.createRecoveryTransaction({
+        advance_id: advance.id,
+        meter_id: meter.id,
+        amount_cents: deduction,
+        channel,
+        event_type: newStatus === 'SETTLED' ? 'FULL' : 'PARTIAL',
+        external_transaction_id,
+      });
+
+      // Log system event for this recovery
+      await db.createSystemEvent({
+        event_type: 'RECOVERY_APPLIED',
+        reference_id: recoveryTx.id,
+        reference_type: 'recovery',
+        payload: { amount: deduction, channel, advance_ref: advance.advance_reference }
+      });
+    }
+
+    // Step 5: Update the meter's outstanding balance
+    if (result.debt_recovered_cents > 0) {
+      await db.updateMeterBalance(meter.id, -result.debt_recovered_cents);
+    }
 
     return NextResponse.json({
       success: true,
@@ -64,17 +110,34 @@ export async function POST(req: NextRequest) {
 
 // GET /api/recovery?meter=XXX
 export async function GET(req: NextRequest) {
-  const meter = req.nextUrl.searchParams.get('meter');
-  if (!meter) {
+  const meterNum = req.nextUrl.searchParams.get('meter');
+  if (!meterNum) {
     return NextResponse.json({ error: 'meter parameter required' }, { status: 400 });
   }
 
-  // In production: query recovery_transactions for this meter
-  return NextResponse.json({
-    meter_number: meter,
-    total_recovered_cents: 22000,
-    recovery_count: 3,
-    last_recovery: new Date().toISOString(),
-    outstanding_cents: 11000,
-  });
+  try {
+    const meter = await db.getMeterByNumber(meterNum);
+    if (!meter) {
+      return NextResponse.json({
+        meter_number: meterNum,
+        total_recovered_cents: 0,
+        recovery_count: 0,
+        outstanding_cents: 0,
+      });
+    }
+
+    const txs = await db.getRecoveryTransactions();
+    const meterTxs = txs.filter(t => t.meter_id === meter.id);
+    const totalRecovered = meterTxs.reduce((sum, t) => sum + t.amount_cents, 0);
+
+    return NextResponse.json({
+      meter_number: meterNum,
+      total_recovered_cents: totalRecovered,
+      recovery_count: meterTxs.length,
+      last_recovery: meterTxs[0]?.created_at || null,
+      outstanding_cents: meter.total_outstanding_cents,
+    });
+  } catch (e) {
+    return NextResponse.json({ error: 'Failed to fetch recovery details' }, { status: 500 });
+  }
 }

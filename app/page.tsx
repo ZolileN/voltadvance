@@ -140,7 +140,12 @@ export default function LandingPage() {
             automatically across every vending channel.
           </p>
           <div className={styles.heroActions}>
-            <a href="https://wa.me/27000000000?text=REQUEST%20ELECTRICITY%20ADVANCE" className="btn btn-primary btn-lg" target="_blank" rel="noreferrer">
+            <a 
+              href={`https://wa.me/${(process.env.NEXT_PUBLIC_TWILIO_WHATSAPP_NUMBER || '+14155238886').replace(/[^0-9]/g, '')}?text=REQUEST%20ELECTRICITY%20ADVANCE`} 
+              className="btn btn-primary btn-lg" 
+              target="_blank" 
+              rel="noreferrer"
+            >
               ⚡ Get Emergency Electricity
             </a>
             <Link href="/dashboard" className="btn btn-secondary btn-lg">
