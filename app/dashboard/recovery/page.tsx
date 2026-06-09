@@ -1,7 +1,5 @@
 'use client';
-import { mockRecoveryTransactions, mockMeters, mockAdvances } from '@/lib/mock-data';
-import { channelRecoveryData } from '@/lib/mock-data';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import { mockRecoveryTransactions, mockMeters, mockAdvances, channelRecoveryData } from '@/lib/mock-data';
 import styles from './recovery.module.css';
 
 function formatCents(c: number) {
@@ -16,7 +14,77 @@ const eventTypeConfig: Record<string, { badge: string; icon: string }> = {
   REVERSAL: { badge: 'badge-warning', icon: '↩' },
 };
 
-const radarData = channelRecoveryData.map(d => ({ subject: d.channel, rate: d.success }));
+// Pure SVG Radar Chart
+function RadarChart({ data }: { data: { channel: string; success: number }[] }) {
+  const cx = 140; const cy = 140; const r = 100;
+  const n = data.length;
+  const minVal = 80; const maxVal = 100;
+
+  const angle = (i: number) => (i * 2 * Math.PI) / n - Math.PI / 2;
+
+  const gridLevels = [0.25, 0.5, 0.75, 1.0];
+  const gridPolygons = gridLevels.map(lvl => {
+    const pts = data.map((_, i) => {
+      const a = angle(i);
+      return `${cx + r * lvl * Math.cos(a)},${cy + r * lvl * Math.sin(a)}`;
+    }).join(' ');
+    return pts;
+  });
+
+  const dataPoints = data.map((d, i) => {
+    const normalized = (d.success - minVal) / (maxVal - minVal);
+    const a = angle(i);
+    return `${cx + r * normalized * Math.cos(a)},${cy + r * normalized * Math.sin(a)}`;
+  }).join(' ');
+
+  return (
+    <svg viewBox="0 0 280 280" className={styles.radarSvg}>
+      {/* Grid polygons */}
+      {gridPolygons.map((pts, i) => (
+        <polygon key={i} points={pts} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+      ))}
+      {/* Axis lines */}
+      {data.map((_, i) => {
+        const a = angle(i);
+        return (
+          <line key={i}
+            x1={cx} y1={cy}
+            x2={cx + r * Math.cos(a)}
+            y2={cy + r * Math.sin(a)}
+            stroke="rgba(255,255,255,0.06)" strokeWidth="1"
+          />
+        );
+      })}
+      {/* Data polygon */}
+      <polygon points={dataPoints} fill="rgba(245,158,11,0.15)" stroke="#F59E0B" strokeWidth="2" />
+      {/* Data dots */}
+      {data.map((d, i) => {
+        const normalized = (d.success - minVal) / (maxVal - minVal);
+        const a = angle(i);
+        return (
+          <circle key={i}
+            cx={cx + r * normalized * Math.cos(a)}
+            cy={cy + r * normalized * Math.sin(a)}
+            r="4" fill="#F59E0B"
+          />
+        );
+      })}
+      {/* Labels */}
+      {data.map((d, i) => {
+        const a = angle(i);
+        const lx = cx + (r + 20) * Math.cos(a);
+        const ly = cy + (r + 20) * Math.sin(a);
+        return (
+          <text key={i} x={lx} y={ly + 4}
+            fill="var(--text-muted)" fontSize="10"
+            textAnchor="middle">
+            {d.channel}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
 
 export default function RecoveryPage() {
   const transactions = mockRecoveryTransactions.map(rt => ({
@@ -118,17 +186,7 @@ export default function RecoveryPage() {
         <div className="card">
           <p className="section-title">Channel Reliability Radar</p>
           <p className="section-subtitle" style={{marginBottom: 'var(--space-4)'}}>Recovery success rate by vending partner</p>
-          <ResponsiveContainer width="100%" height={300}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="rgba(255,255,255,0.06)" />
-              <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-              <Radar dataKey="rate" stroke="var(--color-amber)" fill="var(--color-amber)" fillOpacity={0.2} strokeWidth={2} />
-              <Tooltip
-                formatter={(v: number) => [`${v}%`, 'Success Rate']}
-                contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8 }}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
+          <RadarChart data={channelRecoveryData} />
         </div>
       </div>
     </div>

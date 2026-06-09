@@ -1,10 +1,10 @@
 'use client';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
+import { useState, useEffect } from 'react';
 import { mockDashboardMetrics, advanceVolumeData, riskDistributionData, channelRecoveryData, mockSystemEvents } from '@/lib/mock-data';
 import styles from './overview.module.css';
 
 function formatCents(c: number) {
-  return `R ${(c / 100).toLocaleString('en-ZA', { minimumFractionDigits: 0 })}`;
+  return `R ${(c / 100).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
 }
 
 function timeAgo(dateStr: string) {
@@ -24,21 +24,154 @@ const eventTypeConfig: Record<string, { badge: string; label: string }> = {
   ERROR: { badge: 'badge-danger', label: 'Error' },
 };
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{value: number; name: string; color: string}>; label?: string }) => {
-  if (active && payload?.length) {
-    return (
-      <div className={styles.chartTooltip}>
-        <p className={styles.tooltipLabel}>{label}</p>
-        {payload.map((p, i) => (
-          <p key={i} style={{ color: p.color, fontSize: 12 }}>
-            {p.name}: {formatCents(p.value)}
-          </p>
+// Pure CSS Area Chart
+function AreaChart({ data }: { data: typeof advanceVolumeData }) {
+  const maxVal = Math.max(...data.map(d => d.amount));
+  const w = 600; const h = 160; const pad = { t: 10, r: 10, b: 30, l: 50 };
+  const gw = w - pad.l - pad.r; const gh = h - pad.t - pad.b;
+
+  const points = (key: 'amount' | 'recovered') =>
+    data.map((d, i) => {
+      const x = pad.l + (i / (data.length - 1)) * gw;
+      const y = pad.t + gh - (d[key] / maxVal) * gh;
+      return `${x},${y}`;
+    }).join(' ');
+
+  const area = (key: 'amount' | 'recovered') => {
+    const firstX = pad.l;
+    const lastX = pad.l + gw;
+    const baseY = pad.t + gh;
+    return `${firstX},${baseY} ${points(key)} ${lastX},${baseY}`;
+  };
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className={styles.svgChart}>
+      <defs>
+        <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.3"/>
+          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0"/>
+        </linearGradient>
+        <linearGradient id="grad2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#22C55E" stopOpacity="0.3"/>
+          <stop offset="100%" stopColor="#22C55E" stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      {/* Grid lines */}
+      {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
+        const y = pad.t + gh * (1 - t);
+        return (
+          <g key={i}>
+            <line x1={pad.l} y1={y} x2={pad.l + gw} y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="1"/>
+            <text x={pad.l - 6} y={y + 4} fill="var(--text-muted)" fontSize="9" textAnchor="end">
+              R{Math.round((maxVal * t) / 100)}
+            </text>
+          </g>
+        );
+      })}
+      {/* X labels */}
+      {data.filter((_, i) => i % 3 === 0).map((d, i) => {
+        const idx = i * 3;
+        const x = pad.l + (idx / (data.length - 1)) * gw;
+        return <text key={i} x={x} y={h - 6} fill="var(--text-muted)" fontSize="9" textAnchor="middle">{d.date}</text>;
+      })}
+      {/* Areas */}
+      <polygon points={area('amount')} fill="url(#grad1)"/>
+      <polygon points={area('recovered')} fill="url(#grad2)"/>
+      {/* Lines */}
+      <polyline points={points('amount')} fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinejoin="round"/>
+      <polyline points={points('recovered')} fill="none" stroke="#22C55E" strokeWidth="2" strokeLinejoin="round"/>
+      {/* Legend */}
+      <circle cx={pad.l + 4} cy={10} r="4" fill="#F59E0B"/>
+      <text x={pad.l + 12} y={14} fill="var(--text-secondary)" fontSize="9">Issued</text>
+      <circle cx={pad.l + 55} cy={10} r="4" fill="#22C55E"/>
+      <text x={pad.l + 63} y={14} fill="var(--text-secondary)" fontSize="9">Recovered</text>
+    </svg>
+  );
+}
+
+// Pure CSS Donut
+function DonutChart({ data }: { data: typeof riskDistributionData }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const r = 60; const cx = 80; const cy = 80; const innerR = 36;
+  let angle = -90;
+
+  const slices = data.map(d => {
+    const sweep = (d.value / total) * 360;
+    const a1 = (angle * Math.PI) / 180;
+    const a2 = ((angle + sweep) * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(a1); const y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2); const y2 = cy + r * Math.sin(a2);
+    const ix1 = cx + innerR * Math.cos(a1); const iy1 = cy + innerR * Math.sin(a1);
+    const ix2 = cx + innerR * Math.cos(a2); const iy2 = cy + innerR * Math.sin(a2);
+    const lg = sweep > 180 ? 1 : 0;
+    const path = `M ${x1} ${y1} A ${r} ${r} 0 ${lg} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${innerR} ${innerR} 0 ${lg} 0 ${ix1} ${iy1} Z`;
+    angle += sweep;
+    return { ...d, path };
+  });
+
+  return (
+    <div className={styles.donutRow}>
+      <svg viewBox="0 0 160 160" width={140} height={140}>
+        {slices.map((s, i) => (
+          <path key={i} d={s.path} fill={s.color} opacity={0.9} />
+        ))}
+        <text x={cx} y={cy - 5} textAnchor="middle" fill="var(--text-secondary)" fontSize="10">Total</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fill="var(--text-primary)" fontSize="18" fontWeight="700">{total}</text>
+      </svg>
+      <div className={styles.legend}>
+        {data.map((d, i) => (
+          <div key={i} className={styles.legendItem}>
+            <span className={styles.legendDot} style={{ background: d.color }} />
+            <span className={styles.legendLabel}>{d.name}</span>
+            <span className={styles.legendValue}>{d.value}</span>
+          </div>
         ))}
       </div>
-    );
-  }
-  return null;
-};
+    </div>
+  );
+}
+
+// Pure CSS Bar Chart
+function BarChart({ data }: { data: typeof channelRecoveryData }) {
+  const minVal = 80; const maxVal = 100;
+  const range = maxVal - minVal;
+
+  return (
+    <div className={styles.barChart}>
+      {data.map((d, i) => {
+        const pct = ((d.success - minVal) / range) * 100;
+        return (
+          <div key={i} className={styles.barGroup}>
+            <div className={styles.barLabel}>{d.channel}</div>
+            <div className={styles.barTrack}>
+              <div
+                className={styles.barFill}
+                style={{ width: `${pct}%`, background: d.success >= 96 ? 'var(--color-success)' : d.success >= 93 ? 'var(--color-amber)' : 'var(--color-warning)' }}
+              />
+            </div>
+            <div className={styles.barValue}>{d.success}%</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Live ticker for recovered today
+function LiveTicker({ target }: { target: number }) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    let start = 0;
+    const step = target / 60;
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= target) { setVal(target); clearInterval(timer); }
+      else setVal(Math.round(start));
+    }, 20);
+    return () => clearInterval(timer);
+  }, [target]);
+  return <>{formatCents(val)}</>;
+}
 
 export default function DashboardPage() {
   const m = mockDashboardMetrics;
@@ -54,7 +187,9 @@ export default function DashboardPage() {
         </div>
         <div className="metric-card">
           <span className="metric-label">Recovered Today</span>
-          <span className="metric-value" style={{color: 'var(--color-success)'}}>{formatCents(m.total_recovered_today_cents)}</span>
+          <span className="metric-value" style={{color: 'var(--color-success)'}}>
+            <LiveTicker target={m.total_recovered_today_cents} />
+          </span>
           <div className="metric-delta positive">↑ R4,200 vs yesterday</div>
         </div>
         <div className="metric-card">
@@ -81,7 +216,6 @@ export default function DashboardPage() {
 
       {/* Charts Row */}
       <div className={styles.chartsRow}>
-        {/* Advance Volume Chart */}
         <div className={`card ${styles.chartCard}`}>
           <div className="section-header">
             <div>
@@ -93,29 +227,9 @@ export default function DashboardPage() {
               Live
             </span>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={advanceVolumeData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-              <defs>
-                <linearGradient id="amountGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-amber)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--color-amber)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="recoveredGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-success)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--color-success)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v) => `R${v/100}`} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="amount" name="Issued" stroke="var(--color-amber)" fill="url(#amountGrad)" strokeWidth={2} dot={false} />
-              <Area type="monotone" dataKey="recovered" name="Recovered" stroke="var(--color-success)" fill="url(#recoveredGrad)" strokeWidth={2} dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <AreaChart data={advanceVolumeData} />
         </div>
 
-        {/* Risk Distribution */}
         <div className={`card ${styles.riskCard}`}>
           <div className="section-header">
             <div>
@@ -123,58 +237,19 @@ export default function DashboardPage() {
               <p className="section-subtitle">Trust score distribution</p>
             </div>
           </div>
-          <div className={styles.donutRow}>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie
-                  data={riskDistributionData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={75}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {riskDistributionData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className={styles.legend}>
-              {riskDistributionData.map((d, i) => (
-                <div key={i} className={styles.legendItem}>
-                  <span className={styles.legendDot} style={{ background: d.color }} />
-                  <span className={styles.legendLabel}>{d.name}</span>
-                  <span className={styles.legendValue}>{d.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <DonutChart data={riskDistributionData} />
         </div>
       </div>
 
-      {/* Channel Recovery Performance */}
+      {/* Channel Performance */}
       <div className="card">
         <div className="section-header">
           <div>
             <p className="section-title">Recovery Engine — Channel Performance</p>
-            <p className="section-subtitle">Success rate per vending partner</p>
+            <p className="section-subtitle">Success rate per vending partner (80–100%)</p>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={channelRecoveryData} margin={{ top: 0, right: 5, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-            <XAxis dataKey="channel" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis domain={[80, 100]} tickFormatter={(v) => `${v}%`} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} />
-            <Tooltip
-              formatter={(value: number) => [`${value}%`, 'Success Rate']}
-              contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8 }}
-              labelStyle={{ color: 'var(--text-primary)' }}
-            />
-            <Bar dataKey="success" fill="var(--color-amber)" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChart data={channelRecoveryData} />
       </div>
 
       {/* Transaction Stream */}

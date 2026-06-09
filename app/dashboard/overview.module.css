@@ -1,3 +1,51 @@
+.svgChart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.barChart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.barGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 12px;
+}
+
+.barLabel {
+  min-width: 70px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.barTrack {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 1s ease;
+}
+
+.barValue {
+  min-width: 38px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
 .page {
   display: flex;
   flex-direction: column;
