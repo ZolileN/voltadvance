@@ -170,20 +170,78 @@ Stay powered. 💛`;
       }
 
       if (amount) {
-        const res = await fetch(`${req.nextUrl.origin}/api/advances`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const amount_cents = Math.round(amount * 100);
+        const fee_cents = Math.round(amount_cents * 0.1);
+        const total_owed_cents = amount_cents + fee_cents;
+
+        // 1. Get or create borrower
+        let borrower = await db.getBorrowerByPhone(phone);
+        if (!borrower) {
+          borrower = await db.createBorrower({
             phone_number: phone,
+            trust_score: 75,
+            risk_tier: 'STANDARD',
+            total_active_exposure_cents: 0,
+            total_repaid_cents: 0
+          });
+        }
+
+        // 2. Get or create meter
+        let meter = await db.getMeterByNumber(session.meterNumber || '123456789');
+        if (!meter) {
+          meter = await db.createMeter({
             meter_number: session.meterNumber || '123456789',
-            amount_rands: amount,
-            issued_via: 'WHATSAPP'
-          })
+            provider_name: 'City Power',
+            status: 'ACTIVE'
+          });
+        }
+
+        // 3. Evaluate risk
+        const risk = evaluateRisk({
+          phone_number: phone,
+          meter_age_days: 200,
+          purchase_frequency_per_month: 4,
+          average_purchase_cents: 15000,
+          advances_taken: borrower.total_repaid_cents > 0 ? 3 : 0,
+          advances_repaid: borrower.total_repaid_cents > 0 ? 3 : 0,
+          time_to_repayment_days: 5,
+          current_outstanding_cents: meter.total_outstanding_cents,
+          linked_phone_count: 1,
+          suspicious_patterns: meter.status === 'FLAGGED',
         });
 
-        const json = await res.json();
+        if (risk.approved && amount_cents <= risk.advance_limit_cents) {
+          const advance_reference = `ADV-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 99).toString().padStart(2, '0')}`;
+          const token = Array.from({ length: 4 }, () =>
+            Math.floor(1000 + Math.random() * 9000)
+          ).join('-');
 
-        if (json.approved) {
+          // Create advance record
+          const advance = await db.createAdvance({
+            advance_reference,
+            borrower_id: borrower.id,
+            meter_id: meter.id,
+            principal_cents: amount_cents,
+            fee_cents,
+            outstanding_cents: total_owed_cents,
+            repaid_cents: 0,
+            status: 'ACTIVE',
+            issued_via: 'WHATSAPP',
+            consent_snapshot: true
+          });
+
+          // Update database balances
+          await db.updateMeterBalance(meter.id, total_owed_cents);
+          await db.updateBorrowerExposure(borrower.id, total_owed_cents);
+
+          // Log system event
+          await db.createSystemEvent({
+            event_type: 'ADVANCE_ISSUED',
+            reference_id: advance.id,
+            reference_type: 'advance',
+            payload: { amount: amount_cents, meter: meter.meter_number }
+          });
+
           replyText = `✅ *Advance Approved!*
 
 *Amount:* R${amount.toFixed(2)}
@@ -191,14 +249,14 @@ Stay powered. 💛`;
 *Total owed:* R${(amount * 1.1).toFixed(2)}
 
 Your electricity token:
-\`${json.advance.token}\`
+\`${token}\`
 
-🔌 Token valid for meter: ${session.meterNumber || '123456789'}
+🔌 Token valid for meter: ${meter.meter_number}
 💡 Repayment: automatic on next purchase
 
 Stay powered. 💛`;
         } else {
-          replyText = `❌ *Advance Declined*\n\nReason: ${json.reason || 'Risk threshold not met.'}`;
+          replyText = `❌ *Advance Declined*\n\nReason: ${amount_cents > risk.advance_limit_cents ? `Requested amount exceeds dynamic limit of R${(risk.advance_limit_cents / 100).toFixed(2)}.` : 'Risk evaluation failed.'}`;
         }
         session.state = 'IDLE';
       } else {

@@ -5,11 +5,15 @@ import { db } from '@/lib/db';
 export async function GET(req: NextRequest) {
   const number = req.nextUrl.searchParams.get('number');
 
-  if (!number) {
-    return NextResponse.json({ error: 'Meter number required' }, { status: 400 });
-  }
-
   try {
+    if (!number) {
+      const list = await db.getMeters();
+      return NextResponse.json({
+        meters: list,
+        total: list.length,
+      });
+    }
+
     const meter = await db.getMeterByNumber(number);
 
     if (!meter) {

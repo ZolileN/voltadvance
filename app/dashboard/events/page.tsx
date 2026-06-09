@@ -1,5 +1,5 @@
 'use client';
-import { mockSystemEvents, mockMeterPurchases, mockMeters } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
 import styles from './events.module.css';
 
 const eventConfig: Record<string, { badge: string; icon: string; color: string }> = {
@@ -22,10 +22,38 @@ function formatCents(c: number) {
 }
 
 export default function EventsPage() {
-  const purchases = mockMeterPurchases.map(p => ({
-    ...p,
-    meter_number: mockMeters.find(m => m.id === p.meter_id)?.meter_number || 'N/A',
-  }));
+  const [events, setEvents] = useState<any[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/events');
+        const json = await res.json();
+        setEvents(json.events || []);
+        setPurchases(json.purchases || []);
+      } catch (e) {
+        console.error('Failed to load events:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (loading && events.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--text-secondary)' }}>
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+          <div className="pulse-dot" style={{ margin: '0 auto var(--space-4) auto', float: 'none' }} />
+          <p className="section-title">Loading Events Stream...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -39,11 +67,11 @@ export default function EventsPage() {
             </div>
             <span className="badge badge-live">
               <span className="pulse-dot" />
-              Live
+              Live feed
             </span>
           </div>
           <div className={styles.stream}>
-            {[...mockSystemEvents].reverse().map(event => {
+            {[...events].reverse().map(event => {
               const cfg = eventConfig[event.event_type] || { badge: 'badge-neutral', icon: '•', color: 'var(--text-muted)' };
               return (
                 <div key={event.id} className={styles.eventRow}>
@@ -87,6 +115,10 @@ export default function EventsPage() {
               <p className="section-title">🔌 Electricity Purchases</p>
               <p className="section-subtitle">All meter purchase events</p>
             </div>
+            <span className="badge badge-live">
+              <span className="pulse-dot" />
+              Live feed
+            </span>
           </div>
           <div className="table-container">
             <table>

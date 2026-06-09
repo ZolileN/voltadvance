@@ -180,6 +180,42 @@ export const db = {
     }
   },
 
+  async updateBorrowerExposure(borrowerId: string, exposureDeltaCents: number) {
+    if (!dbClient) {
+      const b = globalStore.borrowers.find((b: any) => b.id === borrowerId);
+      if (b) {
+        b.total_active_exposure_cents = Math.max(0, b.total_active_exposure_cents + exposureDeltaCents);
+        b.updated_at = new Date().toISOString();
+      }
+      return;
+    }
+    try {
+      const { data: borrower, error: fetchErr } = await dbClient
+        .from('borrowers')
+        .select('total_active_exposure_cents')
+        .eq('id', borrowerId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const newExposure = Math.max(0, (borrower?.total_active_exposure_cents || 0) + exposureDeltaCents);
+      const { error: updateErr } = await dbClient
+        .from('borrowers')
+        .update({
+          total_active_exposure_cents: newExposure,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', borrowerId);
+      if (updateErr) throw updateErr;
+    } catch (e) {
+      console.warn('DB Error in updateBorrowerExposure, falling back to mock:', e);
+      const b = globalStore.borrowers.find((b: any) => b.id === borrowerId);
+      if (b) {
+        b.total_active_exposure_cents = Math.max(0, b.total_active_exposure_cents + exposureDeltaCents);
+        b.updated_at = new Date().toISOString();
+      }
+    }
+  },
+
   // --- ADVANCES ---
   async getAdvances(): Promise<Advance[]> {
     if (!dbClient) return globalStore.advances;
@@ -364,6 +400,21 @@ export const db = {
       console.warn('DB Error in createSystemEvent, falling back to mock:', e);
       globalStore.system_events.unshift(newEvent);
       return newEvent;
+    }
+  },
+
+  async getMeterPurchases(): Promise<any[]> {
+    if (!dbClient) return globalStore.meter_purchases;
+    try {
+      const { data, error } = await dbClient
+        .from('meter_purchases')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.warn('DB Error in getMeterPurchases, falling back to mock:', e);
+      return globalStore.meter_purchases;
     }
   },
 

@@ -1,5 +1,5 @@
 'use client';
-import { mockBorrowers } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
 import { scoreTierLabel, scoreTierColor } from '@/lib/risk-engine';
 import styles from './borrowers.module.css';
 
@@ -21,16 +21,47 @@ function ScoreBar({ score }: { score: number }) {
 }
 
 export default function BorrowersPage() {
-  const avgScore = Math.round(mockBorrowers.reduce((s, b) => s + b.trust_score, 0) / mockBorrowers.length);
-  const premiumCount = mockBorrowers.filter(b => b.trust_score >= 81).length;
-  const atRiskCount = mockBorrowers.filter(b => b.trust_score <= 40).length;
+  const [borrowers, setBorrowers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/borrowers');
+        const json = await res.json();
+        setBorrowers(json.borrowers || []);
+      } catch (e) {
+        console.error('Failed to load borrowers:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (loading && borrowers.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--text-secondary)' }}>
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+          <div className="pulse-dot" style={{ margin: '0 auto var(--space-4) auto', float: 'none' }} />
+          <p className="section-title">Loading Borrowers Registry...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const avgScore = borrowers.length > 0 ? Math.round(borrowers.reduce((s, b) => s + b.trust_score, 0) / borrowers.length) : 70;
+  const premiumCount = borrowers.filter(b => b.trust_score >= 81).length;
+  const atRiskCount = borrowers.filter(b => b.trust_score <= 40).length;
 
   return (
     <div className={styles.page}>
       <div className={styles.summaryRow}>
         <div className="metric-card">
           <span className="metric-label">Total Borrowers</span>
-          <span className="metric-value text-amber">{mockBorrowers.length}</span>
+          <span className="metric-value text-amber">{borrowers.length}</span>
           <div className="metric-delta neutral">registered phone identities</div>
         </div>
         <div className="metric-card">
@@ -56,6 +87,10 @@ export default function BorrowersPage() {
             <p className="section-title">👤 Borrower Registry</p>
             <p className="section-subtitle">Phone-based identity layer</p>
           </div>
+          <span className="badge badge-live">
+            <span className="pulse-dot" />
+            Live feed
+          </span>
         </div>
         <div className="table-container">
           <table>
@@ -72,7 +107,7 @@ export default function BorrowersPage() {
               </tr>
             </thead>
             <tbody>
-              {mockBorrowers.map(b => {
+              {borrowers.map(b => {
                 const limit = b.trust_score >= 81 ? 'R300' : b.trust_score >= 61 ? 'R100' : b.trust_score >= 41 ? 'R20' : '—';
                 return (
                   <tr key={b.id}>

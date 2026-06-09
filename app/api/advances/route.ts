@@ -95,8 +95,9 @@ export async function POST(req: NextRequest) {
       consent_snapshot: true
     });
 
-    // Step 7: Update meter balance
+    // Step 7: Update meter balance & borrower exposure
     await db.updateMeterBalance(meter.id, total_owed_cents);
+    await db.updateBorrowerExposure(borrower.id, total_owed_cents);
 
     // Step 8: Log system event
     await db.createSystemEvent({
@@ -141,7 +142,6 @@ export async function GET(req: NextRequest) {
     const list = await db.getAdvances();
     let filtered = list;
 
-    // Filter logic if needed
     if (phone) {
       const b = await db.getBorrowerByPhone(phone);
       filtered = b ? filtered.filter(a => a.borrower_id === b.id) : [];
@@ -151,9 +151,22 @@ export async function GET(req: NextRequest) {
       filtered = m ? filtered.filter(a => a.meter_id === m.id) : [];
     }
 
+    const borrowersList = await db.getBorrowers();
+    const metersList = await db.getMeters();
+
+    const enriched = filtered.map((a) => {
+      const bObj = borrowersList.find(b => b.id === a.borrower_id);
+      const mObj = metersList.find(m => m.id === a.meter_id);
+      return {
+        ...a,
+        borrower_phone: bObj?.phone_number || 'Unknown',
+        meter_number: mObj?.meter_number || 'Unknown',
+      };
+    });
+
     return NextResponse.json({
-      advances: filtered,
-      total: filtered.length,
+      advances: enriched,
+      total: enriched.length,
     });
   } catch (e) {
     return NextResponse.json({ error: 'Failed to fetch advances' }, { status: 500 });

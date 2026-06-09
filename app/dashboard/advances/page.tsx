@@ -1,6 +1,5 @@
 'use client';
-import { mockAdvances, mockBorrowers, mockMeters } from '@/lib/mock-data';
-import { Advance } from '@/lib/types';
+import { useState, useEffect } from 'react';
 import styles from './advances.module.css';
 
 function formatCents(c: number) {
@@ -22,18 +21,42 @@ function maskPhone(phone: string) {
   return phone.replace(/(\+\d{2})(\d{3})(\d{4})(\d{3})/, '$1***$4');
 }
 
-const advances: (Advance & { borrower_phone: string; meter_number: string })[] =
-  mockAdvances.map(a => ({
-    ...a,
-    borrower_phone: mockBorrowers.find(b => b.id === a.borrower_id)?.phone_number || 'Unknown',
-    meter_number: mockMeters.find(m => m.id === a.meter_id)?.meter_number || 'Unknown',
-  }));
-
 export default function AdvancesPage() {
+  const [advances, setAdvances] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/advances');
+        const json = await res.json();
+        setAdvances(json.advances || []);
+      } catch (e) {
+        console.error('Failed to load advances ledger:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (loading && advances.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--text-secondary)' }}>
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+          <div className="pulse-dot" style={{ margin: '0 auto var(--space-4) auto', float: 'none' }} />
+          <p className="section-title">Loading Advances Ledger...</p>
+        </div>
+      </div>
+    );
+  }
+
   const totalOutstanding = advances.filter(a => a.status === 'ACTIVE' || a.status === 'PARTIALLY_REPAID')
     .reduce((s, a) => s + a.outstanding_cents, 0);
   const totalSettled = advances.filter(a => a.status === 'SETTLED').length;
-  const totalActive = advances.filter(a => a.status === 'ACTIVE').length;
+  const totalActive = advances.filter(a => a.status === 'ACTIVE' || a.status === 'PARTIALLY_REPAID').length;
 
   return (
     <div className={styles.page}>
@@ -63,6 +86,10 @@ export default function AdvancesPage() {
             <p className="section-title">⚡ Advance Ledger</p>
             <p className="section-subtitle">{advances.length} advances total</p>
           </div>
+          <span className="badge badge-live">
+            <span className="pulse-dot" />
+            Live feed
+          </span>
         </div>
         <div className="table-container">
           <table>

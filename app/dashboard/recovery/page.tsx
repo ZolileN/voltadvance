@@ -1,5 +1,6 @@
 'use client';
-import { mockRecoveryTransactions, mockMeters, mockAdvances, channelRecoveryData } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
+import { channelRecoveryData } from '@/lib/mock-data';
 import styles from './recovery.module.css';
 
 function formatCents(c: number) {
@@ -87,18 +88,43 @@ function RadarChart({ data }: { data: { channel: string; success: number }[] }) 
 }
 
 export default function RecoveryPage() {
-  const transactions = mockRecoveryTransactions.map(rt => ({
-    ...rt,
-    meter_number: mockMeters.find(m => m.id === rt.meter_id)?.meter_number || 'N/A',
-    advance_ref: mockAdvances.find(a => a.id === rt.advance_id)?.advance_reference || 'N/A',
-  }));
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/recovery');
+        const json = await res.json();
+        setTransactions(json.transactions || []);
+      } catch (e) {
+        console.error('Failed to load recovery list:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (loading && transactions.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--text-secondary)' }}>
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+          <div className="pulse-dot" style={{ margin: '0 auto var(--space-4) auto', float: 'none' }} />
+          <p className="section-title">Loading Recovery Ledger...</p>
+        </div>
+      </div>
+    );
+  }
 
   const totalRecovered = transactions
     .filter(t => t.event_type !== 'FAILED')
     .reduce((s, t) => s + t.amount_cents, 0);
-  const successRate = Math.round(
+  const successRate = transactions.length > 0 ? Math.round(
     (transactions.filter(t => t.event_type !== 'FAILED').length / transactions.length) * 100
-  );
+  ) : 100;
 
   return (
     <div className={styles.page}>
@@ -130,6 +156,10 @@ export default function RecoveryPage() {
               <p className="section-title">🔄 Recovery Transactions</p>
               <p className="section-subtitle">{transactions.length} events logged</p>
             </div>
+            <span className="badge badge-live">
+              <span className="pulse-dot" />
+              Live feed
+            </span>
           </div>
           <div className="table-container">
             <table>

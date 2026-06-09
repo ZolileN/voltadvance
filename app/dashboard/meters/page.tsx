@@ -1,5 +1,5 @@
 'use client';
-import { mockMeters } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
 import styles from './meters.module.css';
 
 function formatCents(c: number) {
@@ -24,9 +24,40 @@ function timeSince(dateStr?: string) {
 }
 
 export default function MetersPage() {
-  const activeCount = mockMeters.filter(m => m.status === 'ACTIVE').length;
-  const flaggedCount = mockMeters.filter(m => m.status === 'FLAGGED').length;
-  const totalExposure = mockMeters.reduce((s, m) => s + m.total_outstanding_cents, 0);
+  const [meters, setMeters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/meters');
+        const json = await res.json();
+        setMeters(json.meters || []);
+      } catch (e) {
+        console.error('Failed to load meters:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (loading && meters.length === 0) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: 'var(--text-secondary)' }}>
+        <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+          <div className="pulse-dot" style={{ margin: '0 auto var(--space-4) auto', float: 'none' }} />
+          <p className="section-title">Loading Meter Registry...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const activeCount = meters.filter(m => m.status === 'ACTIVE').length;
+  const flaggedCount = meters.filter(m => m.status === 'FLAGGED').length;
+  const totalExposure = meters.reduce((s, m) => s + m.total_outstanding_cents, 0);
 
   return (
     <div className={styles.page}>
@@ -52,13 +83,17 @@ export default function MetersPage() {
         <div className="section-header">
           <div>
             <p className="section-title">🔌 Meter Registry</p>
-            <p className="section-subtitle">{mockMeters.length} meters registered</p>
+            <p className="section-subtitle">{meters.length} meters registered</p>
           </div>
+          <span className="badge badge-live">
+            <span className="pulse-dot" />
+            Live feed
+          </span>
         </div>
 
         {/* Meter Cards Grid */}
         <div className={styles.meterGrid}>
-          {mockMeters.map(meter => (
+          {meters.map(meter => (
             <div key={meter.id} className={`${styles.meterCard} ${meter.status === 'FLAGGED' ? styles.meterFlagged : ''}`}>
               <div className={styles.meterHeader}>
                 <span className="font-mono" style={{fontSize: 15, fontWeight: 700, color: 'var(--color-amber)'}}>

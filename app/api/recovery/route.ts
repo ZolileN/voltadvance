@@ -111,12 +111,29 @@ export async function POST(req: NextRequest) {
 // GET /api/recovery?meter=XXX
 export async function GET(req: NextRequest) {
   const meterNum = req.nextUrl.searchParams.get('meter');
-  if (!meterNum) {
-    return NextResponse.json({ error: 'meter parameter required' }, { status: 400 });
-  }
 
   try {
-    const meter = await db.getMeterByNumber(meterNum);
+    const allTxs = await db.getRecoveryTransactions();
+    const metersList = await db.getMeters();
+    const advancesList = await db.getAdvances();
+
+    if (!meterNum) {
+      const enriched = allTxs.map(t => {
+        const m = metersList.find(mObj => mObj.id === t.meter_id);
+        const a = advancesList.find(aObj => aObj.id === t.advance_id);
+        return {
+          ...t,
+          meter_number: m?.meter_number || 'Unknown',
+          advance_ref: a?.advance_reference || 'Unknown'
+        };
+      });
+      return NextResponse.json({
+        transactions: enriched,
+        total: enriched.length,
+      });
+    }
+
+    const meter = metersList.find(m => m.meter_number === meterNum);
     if (!meter) {
       return NextResponse.json({
         meter_number: meterNum,
@@ -126,8 +143,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const txs = await db.getRecoveryTransactions();
-    const meterTxs = txs.filter(t => t.meter_id === meter.id);
+    const meterTxs = allTxs.filter(t => t.meter_id === meter.id);
     const totalRecovered = meterTxs.reduce((sum, t) => sum + t.amount_cents, 0);
 
     return NextResponse.json({
