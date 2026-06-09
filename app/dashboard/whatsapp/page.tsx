@@ -211,19 +211,29 @@ export default function WhatsAppPage() {
 
         {/* Phone Frame */}
         <div className={styles.phoneWrap}>
+          {/* iOS Device Bezel & Notch Overlay */}
+          <div className={styles.iphoneOverlay} />
+          
           <div className={styles.phone}>
             {/* Status bar */}
             <div className={styles.statusBar}>
-              <span>{new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}</span>
-              <span>📶 🔋</span>
+              <span className={styles.statusTime}>
+                {new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+              <span className={styles.statusIcons}>📶 📡 🔋</span>
             </div>
 
             {/* WhatsApp Header */}
             <div className={styles.waHeader}>
+              <span className={styles.waBack}>〈</span>
               <div className={styles.waAvatar}>⚡</div>
-              <div>
+              <div style={{ flex: 1 }}>
                 <p className={styles.waName}>VoltAdvance</p>
                 <p className={styles.waStatus}>WhatsApp Business · Online</p>
+              </div>
+              <div className={styles.waCallIcons}>
+                <span>📹</span>
+                <span>📞</span>
               </div>
             </div>
 
@@ -248,6 +258,7 @@ export default function WhatsAppPage() {
 
             {/* Input */}
             <div className={styles.inputRow}>
+              <span className={styles.waAddIcon}>＋</span>
               <input
                 id="whatsapp-input"
                 className={styles.chatInput}
@@ -265,6 +276,9 @@ export default function WhatsAppPage() {
                 ➤
               </button>
             </div>
+            
+            {/* iOS Home Indicator */}
+            <div className={styles.homeIndicator} />
           </div>
         </div>
       </div>
