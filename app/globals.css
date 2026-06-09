@@ -345,13 +345,18 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ─── Tables ─── */
 .table-container {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
 }
 
 table {
   width: 100%;
+  min-width: 680px; /* Ensures tables have enough horizontal breathing room on mobile */
   border-collapse: collapse;
   font-size: 13px;
 }

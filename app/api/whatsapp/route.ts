@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { evaluateRisk } from '@/lib/risk-engine';
+import { evaluateRisk, scoreTierLabel } from '@/lib/risk-engine';
 import { db } from '@/lib/db';
 
 // Persist session state across hot reloads in development
@@ -122,10 +122,34 @@ How much electricity would you like to buy?
 (Enter an amount in Rands, e.g. *100* or *200*):`;
         session.state = 'AWAITING_BUY_AMOUNT';
       } else if (['2', 'request advance', 'advance', 'emergency'].includes(normalized)) {
+        let score = 70;
+        const borrower = await db.getBorrowerByPhone(phone);
+        if (borrower) {
+          const digits = phone.replace(/[^0-9]/g, '');
+          let sum = 0;
+          for (let i = 0; i < digits.length; i++) {
+            sum += parseInt(digits[i], 10) || 0;
+          }
+          const advancesTaken = borrower.total_repaid_cents > 0 ? Math.max(1, Math.round(borrower.total_repaid_cents / 10000)) : 0;
+          const risk = evaluateRisk({
+            phone_number: phone,
+            meter_age_days: 180 + (sum % 360),
+            purchase_frequency_per_month: 3 + (sum % 4),
+            average_purchase_cents: 8000 + (sum % 12000),
+            advances_taken: advancesTaken,
+            advances_repaid: advancesTaken,
+            time_to_repayment_days: 3 + (sum % 5),
+            current_outstanding_cents: borrower.total_active_exposure_cents,
+            linked_phone_count: 1,
+            suspicious_patterns: false,
+          });
+          score = risk.trust_score;
+        }
+
         replyText = `📋 *Advance Request*
 
 Your meter: ${session.meterNumber}
-Trust Score: 85/100 ✅
+Trust Score: ${score}/100 ✅
 
 How much emergency credit would you like?
 
@@ -141,30 +165,42 @@ Type the number or amount:`;
         let outstandingRands = 110.0;
         let limitRands = 300.0;
         let repaidRands = 850.0;
+        let score = 70;
+        let tierLabel = 'Standard';
 
         const borrower = await db.getBorrowerByPhone(phone);
         if (borrower) {
           outstandingRands = borrower.total_active_exposure_cents / 100;
           repaidRands = borrower.total_repaid_cents / 100;
+          
+          const digits = phone.replace(/[^0-9]/g, '');
+          let sum = 0;
+          for (let i = 0; i < digits.length; i++) {
+            sum += parseInt(digits[i], 10) || 0;
+          }
+          const advancesTaken = borrower.total_repaid_cents > 0 ? Math.max(1, Math.round(borrower.total_repaid_cents / 10000)) : 0;
+          
           const risk = evaluateRisk({
             phone_number: phone,
-            meter_age_days: 200,
-            purchase_frequency_per_month: 4,
-            average_purchase_cents: 15000,
-            advances_taken: borrower.total_repaid_cents > 0 ? 3 : 0,
-            advances_repaid: borrower.total_repaid_cents > 0 ? 3 : 0,
-            time_to_repayment_days: 5,
+            meter_age_days: 180 + (sum % 360),
+            purchase_frequency_per_month: 3 + (sum % 4),
+            average_purchase_cents: 8000 + (sum % 12000),
+            advances_taken: advancesTaken,
+            advances_repaid: advancesTaken,
+            time_to_repayment_days: 3 + (sum % 5),
             current_outstanding_cents: borrower.total_active_exposure_cents,
             linked_phone_count: 1,
             suspicious_patterns: false,
           });
           limitRands = risk.advance_limit_cents / 100;
+          score = risk.trust_score;
+          tierLabel = scoreTierLabel(score);
         }
 
         replyText = `💳 *Your Account & Balances*
 
 Phone: ${phone}
-Trust Score: *85/100* (Premium)
+Trust Score: *${score}/100* (${tierLabel})
 Active Exposure: *R${outstandingRands.toFixed(2)}*
 Total Repaid: *R${repaidRands.toFixed(2)}*
 Advance Limit: *R${limitRands.toFixed(0)}*

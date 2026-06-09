@@ -49,7 +49,7 @@ const botMessages = [
 function BotDemo() {
   const [visibleMessages, setVisibleMessages] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (visibleMessages < botMessages.length) {
@@ -65,7 +65,9 @@ function BotDemo() {
   }, [visibleMessages]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
   }, [visibleMessages, isTyping]);
 
   return (
@@ -77,7 +79,7 @@ function BotDemo() {
           <p className={styles.phoneStatus}>WhatsApp Business</p>
         </div>
       </div>
-      <div className={styles.phoneChat}>
+      <div ref={chatRef} className={styles.phoneChat}>
         {botMessages.slice(0, visibleMessages).map((msg, i) => (
           <div key={i} className={`${styles.bubble} ${msg.from === 'user' ? styles.bubbleUser : styles.bubbleBot}`}>
             <pre className={styles.bubbleText}>{msg.text}</pre>
@@ -91,7 +93,6 @@ function BotDemo() {
             </span>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
@@ -112,11 +113,7 @@ export default function LandingPage() {
             <a href="#channels">Channels</a>
             <a href="#whatsapp">WhatsApp Bot</a>
           </div>
-          <div className={styles.navActions}>
-            <Link href="/dashboard" className="btn btn-secondary btn-sm">
-              Ops Dashboard →
-            </Link>
-          </div>
+          <div className={styles.navActions} />
         </div>
       </nav>
 
@@ -148,9 +145,6 @@ export default function LandingPage() {
             >
               ⚡ Get Emergency Electricity
             </a>
-            <Link href="/dashboard" className="btn btn-secondary btn-lg">
-              View Ops Dashboard
-            </Link>
           </div>
         </div>
       </section>
@@ -295,9 +289,14 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
-            <Link href="/dashboard" className="btn btn-primary btn-lg">
-              Open Operations Dashboard →
-            </Link>
+            <a 
+              href={`https://wa.me/${(process.env.NEXT_PUBLIC_TWILIO_WHATSAPP_NUMBER || '+14155238886').replace(/[^0-9]/g, '')}?text=REQUEST%20ELECTRICITY%20ADVANCE`} 
+              className="btn btn-primary btn-lg"
+              target="_blank"
+              rel="noreferrer"
+            >
+              ⚡ Launch WhatsApp Bot
+            </a>
           </div>
         </div>
       </section>

@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import styles from './dashboard.module.css';
@@ -16,17 +17,28 @@ const navItems = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className={styles.shell}>
+      {/* Sidebar Backdrop Overlay on Mobile */}
+      {sidebarOpen && (
+        <div className={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarLogo}>
-          <Link href="/" className={styles.logo}>
-            <span className={styles.logoIcon}>⚡</span>
-            <span className={styles.logoText}>VoltAdvance</span>
-          </Link>
-          <span className={styles.opsTag}>OPS</span>
+      <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : ''}`}>
+        <div className={styles.sidebarHeaderRow}>
+          <div className={styles.sidebarLogo}>
+            <Link href="/dashboard" className={styles.logo} onClick={() => setSidebarOpen(false)}>
+              <span className={styles.logoIcon}>⚡</span>
+              <span className={styles.logoText}>VoltAdvance</span>
+            </Link>
+            <span className={styles.opsTag}>OPS</span>
+          </div>
+          <button className={styles.closeBtn} onClick={() => setSidebarOpen(false)}>
+            ×
+          </button>
         </div>
 
         <nav className={styles.nav}>
@@ -37,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={`${styles.navItem} ${isActive ? styles.navActive : ''}`}
               >
                 <span className={styles.navIcon}>{item.icon}</span>
@@ -54,6 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={`${styles.navItem} ${isActive ? styles.navActive : ''}`}
               >
                 <span className={styles.navIcon}>{item.icon}</span>
@@ -77,6 +91,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Top Bar */}
         <header className={styles.topbar}>
           <div className={styles.topbarLeft}>
+            {/* Hamburger button visible only on mobile */}
+            <button className={styles.hamburger} onClick={() => setSidebarOpen(true)}>
+              ☰
+            </button>
             <h1 className={styles.pageTitle}>
               {navItems.find(n => n.exact ? pathname === n.href : pathname.startsWith(n.href))?.label || 'Dashboard'}
             </h1>
@@ -89,9 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className={styles.dateChip}>
               {new Date().toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })}
             </div>
-            <Link href="/" className="btn btn-ghost btn-sm">
-              ← Landing
-            </Link>
+            {/* Removed ← Landing button */}
           </div>
         </header>
 
