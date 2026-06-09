@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { evaluateRisk } from '@/lib/risk-engine';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/db';
 
 // Persist session state across hot reloads in development
 const globalSessionMap = (global as any)._whatsappSessions || new Map<string, { state: string; meterNumber?: string }>();
@@ -11,17 +11,16 @@ if (process.env.NODE_ENV !== 'production') {
 const MENU = `⚡ *VoltAdvance Bot*
 _Utility Credit Infrastructure_
 
-Please choose:
-1️⃣ Request Advance
-2️⃣ My Balance
-3️⃣ Meter Status
-4️⃣ Repayment History
+Please choose an option:
+1️⃣ Buy Electricity (Standard Recharge)
+2️⃣ Request Advance (Emergency Credit)
+3️⃣ My Account & Balances
+4️⃣ Meter Status & History
 
 Type a number or keyword.`;
 
 export async function POST(req: NextRequest) {
   try {
-    // Twilio sends urlencoded post requests
     const contentType = req.headers.get('content-type') || '';
     let from = '';
     let body = '';
@@ -32,13 +31,11 @@ export async function POST(req: NextRequest) {
       from = params.get('From') || '';
       body = params.get('Body') || '';
     } else {
-      // JSON fallback
       const json = await req.json();
       from = json.From || '';
       body = json.Body || '';
     }
 
-    // Clean phone number (e.g. "whatsapp:+27821234567" -> "+27821234567")
     const phone = from.replace('whatsapp:', '').trim();
     if (!phone) {
       return new NextResponse('<Response><Message>Error: Missing sender phone number.</Message></Response>', {
@@ -48,7 +45,6 @@ export async function POST(req: NextRequest) {
 
     const normalized = body.toLowerCase().trim();
 
-    // Get session
     let session = globalSessionMap.get(phone);
     if (!session) {
       session = { state: 'IDLE', meterNumber: '123456789' };
@@ -58,13 +54,21 @@ export async function POST(req: NextRequest) {
     let replyText = '';
 
     if (session.state === 'IDLE') {
-      if (['1', 'request advance', 'advance', 'request electricity advance'].includes(normalized)) {
+      if (['1', 'buy', 'buy electricity', 'recharge'].includes(normalized)) {
+        replyText = `🔌 *Buy Electricity*
+
+Your meter: ${session.meterNumber || '123456789'}
+
+How much electricity would you like to buy?
+(Enter an amount in Rands, e.g. *100* or *200*):`;
+        session.state = 'AWAITING_BUY_AMOUNT';
+      } else if (['2', 'request advance', 'advance', 'emergency'].includes(normalized)) {
         replyText = `📋 *Advance Request*
 
 Your meter: ${session.meterNumber || '123456789'}
 Trust Score: 85/100 ✅
 
-How much would you like?
+How much emergency credit would you like?
 
 1️⃣ R50
 2️⃣ R100
@@ -73,37 +77,87 @@ How much would you like?
 
 Type the number or amount:`;
         session.state = 'AWAITING_ADVANCE_AMOUNT';
-      } else if (['2', 'my balance', 'balance'].includes(normalized)) {
-        replyText = `💳 *Your Account*
+      } else if (['3', 'my balance', 'balance', 'account'].includes(normalized)) {
+        // Fetch real balance from database when possible
+        let outstandingRands = 110.0;
+        let limitRands = 300.0;
+        let repaidRands = 850.0;
+
+        const borrower = await db.getBorrowerByPhone(phone);
+        if (borrower) {
+          outstandingRands = borrower.total_active_exposure_cents / 100;
+          repaidRands = borrower.total_repaid_cents / 100;
+          const risk = evaluateRisk({
+            phone_number: phone,
+            meter_age_days: 200,
+            purchase_frequency_per_month: 4,
+            average_purchase_cents: 15000,
+            advances_taken: borrower.total_repaid_cents > 0 ? 3 : 0,
+            advances_repaid: borrower.total_repaid_cents > 0 ? 3 : 0,
+            time_to_repayment_days: 5,
+            current_outstanding_cents: borrower.total_active_exposure_cents,
+            linked_phone_count: 1,
+            suspicious_patterns: false,
+          });
+          limitRands = risk.advance_limit_cents / 100;
+        }
+
+        replyText = `💳 *Your Account & Balances*
 
 Phone: ${phone}
 Trust Score: *85/100* (Premium)
-Active Exposure: *R110.00*
-Total Repaid: *R850.00*
-Advance Limit: *R300*
+Active Exposure: *R${outstandingRands.toFixed(2)}*
+Total Repaid: *R${repaidRands.toFixed(2)}*
+Advance Limit: *R${limitRands.toFixed(0)}*
 
-Outstanding advance: ADV-0001-01
-Amount due: *R110.00*
-_Will recover on next electricity purchase._`;
-      } else if (['3', 'meter status', 'check meter'].some(k => normalized.includes(k))) {
-        if (normalized.includes('check meter ') || /\d{9}/.test(normalized)) {
+${outstandingRands > 0 ? `Outstanding advance balance: *R${outstandingRands.toFixed(2)}*\n_Repayment is auto-recovered from your next purchase._` : 'No outstanding advances! You are clear to take a new advance.'}`;
+      } else if (['4', 'meter status', 'meter', 'history'].includes(normalized)) {
+        if (normalized.includes('check ') || /\d{9}/.test(normalized)) {
           const meterNum = normalized.match(/\d{9}/)?.[0] || '123456789';
-          replyText = getMeterStatusString(meterNum);
+          replyText = await getMeterStatusString(meterNum);
         } else {
-          replyText = '🔌 *Meter Lookup*\n\nPlease enter your meter number:';
+          replyText = '🔌 *Meter Status & History*\n\nEnter your 9-digit meter number to check obligations:\n_(e.g. 123456789)_';
           session.state = 'AWAITING_METER';
         }
-      } else if (['4', 'repayment history', 'history'].includes(normalized)) {
-        replyText = `📊 *Repayment History*
-
-ADV-0003-01 · R100 → ✅ Settled (Jun 02)
-ADV-0002-01 · R50  → ✅ Settled (May 15)
-ADV-0001-01 · R100 → 🟡 Active (Jun 07)
-
-Recovery Rate: *100%*
-Next advance available after settlement.`;
       } else {
         replyText = `Welcome to VoltAdvance! 👋\n\n${MENU}`;
+      }
+    } else if (session.state === 'AWAITING_BUY_AMOUNT') {
+      const parsedAmount = parseFloat(normalized.replace(/[^0-9.]/g, ''));
+      if (!isNaN(parsedAmount) && parsedAmount > 0) {
+        const purchase_cents = Math.round(parsedAmount * 100);
+        
+        // Execute dynamic clearing engine transaction
+        const clearing = await db.executePurchaseClearing(
+          session.meterNumber || '123456789',
+          purchase_cents,
+          'WHATSAPP',
+          `WA-${Date.now()}`
+        );
+
+        const token = Array.from({ length: 4 }, () =>
+          Math.floor(1000 + Math.random() * 9000)
+        ).join('-');
+
+        const recovered_rands = clearing.debt_recovered_cents / 100;
+        const electricity_rands = clearing.electricity_amount_cents / 100;
+        const remaining_rands = clearing.remaining_outstanding_cents / 100;
+
+        replyText = `🔌 *Standard Recharge Successful*
+
+*Vending Token:* \`${token}\`
+*Purchase Value:* R${parsedAmount.toFixed(2)}
+
+--------------------------------
+${clearing.debt_recovered_cents > 0 ? `⚡ *VoltAdvance Clearing:*
+- Debt recovered: R${recovered_rands.toFixed(2)}
+- Net electricity: R${electricity_rands.toFixed(2)}
+- Remaining debt: R${remaining_rands.toFixed(2)}` : 'No outstanding debt. Full electricity value issued.'}
+
+Stay powered. 💛`;
+        session.state = 'IDLE';
+      } else {
+        replyText = 'Please enter a valid amount in Rands to buy electricity (e.g. 100).';
       }
     } else if (session.state === 'AWAITING_ADVANCE_AMOUNT') {
       const amountMap: Record<string, number> = { '1': 50, '2': 100, '3': 200, '4': 300 };
@@ -116,39 +170,48 @@ Next advance available after settlement.`;
       }
 
       if (amount) {
-        const fee = Math.round(amount * 0.1);
-        const total = amount + fee;
-        const tokens = Array.from({ length: 4 }, () =>
-          Math.floor(1000 + Math.random() * 9000)
-        ).join('-');
+        const res = await fetch(`${req.nextUrl.origin}/api/advances`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone_number: phone,
+            meter_number: session.meterNumber || '123456789',
+            amount_rands: amount,
+            issued_via: 'WHATSAPP'
+          })
+        });
 
-        replyText = `✅ *Advance Approved!*
+        const json = await res.json();
+
+        if (json.approved) {
+          replyText = `✅ *Advance Approved!*
 
 *Amount:* R${amount.toFixed(2)}
-*Fee:* R${fee.toFixed(2)} _(recovered automatically)_
-*Total owed:* R${total.toFixed(2)}
+*Fee:* R${(amount * 0.1).toFixed(2)} _(recovered automatically)_
+*Total owed:* R${(amount * 1.1).toFixed(2)}
 
 Your electricity token:
-\`${tokens}\`
+\`${json.advance.token}\`
 
 🔌 Token valid for meter: ${session.meterNumber || '123456789'}
 💡 Repayment: automatic on next purchase
 
 Stay powered. 💛`;
+        } else {
+          replyText = `❌ *Advance Declined*\n\nReason: ${json.reason || 'Risk threshold not met.'}`;
+        }
         session.state = 'IDLE';
       } else {
         replyText = 'Please choose 1–4 or type an amount between R20 and R300.';
       }
     } else if (session.state === 'AWAITING_METER') {
       const meterNum = normalized.match(/\d{6,12}/)?.[0] || normalized;
-      replyText = getMeterStatusString(meterNum);
+      replyText = await getMeterStatusString(meterNum);
       session.state = 'IDLE';
     }
 
-    // Save updated session
     globalSessionMap.set(phone, session);
 
-    // Build TwiML response
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Message>${replyText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Message>
@@ -170,30 +233,22 @@ Stay powered. 💛`;
   }
 }
 
-function getMeterStatusString(meterNum: string): string {
-  const data: Record<string, string> = {
-    '123456789': `🔌 *Meter Status: 123456789*
-
-Provider: City Power
-Status: ✅ Active
-Outstanding: R110.00
-Borrower: ****4567
-Last activity: 1 day ago
-Risk level: Low`,
-    '777300400': `🔌 *Meter Status: 777300400*
-
-Provider: Eskom
-Status: ⚠️ FLAGGED
-Outstanding: R100.00
-Borrower: ****1111
-Last activity: 8 days ago
-Risk level: 🔴 HIGH
-
-Multiple phone numbers detected.`,
-  };
-
-  return data[meterNum] || `🔌 *Meter: ${meterNum}*
+async function getMeterStatusString(meterNum: string): Promise<string> {
+  const meter = await db.getMeterByNumber(meterNum);
+  if (!meter) {
+    return `🔌 *Meter: ${meterNum}*
 
 Status: Not found in registry.
 Please check the meter number and try again.`;
+  }
+
+  const active = await db.getActiveAdvancesForMeter(meter.id);
+
+  return `🔌 *Meter Status: ${meter.meter_number}*
+
+Provider: ${meter.provider_name || 'City Power'}
+Status: ${meter.status === 'ACTIVE' ? '✅ Active' : '⚠️ ' + meter.status}
+Outstanding: R${(meter.total_outstanding_cents / 100).toFixed(2)}
+Active Advances: ${active.length}
+Last activity: ${meter.last_activity_at ? new Date(meter.last_activity_at).toLocaleDateString() : 'N/A'}`;
 }

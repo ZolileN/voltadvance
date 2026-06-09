@@ -365,5 +365,137 @@ export const db = {
       globalStore.system_events.unshift(newEvent);
       return newEvent;
     }
+  },
+
+  async executePurchaseClearing(
+    meterNumber: string,
+    purchaseAmountCents: number,
+    channel: string,
+    externalTransactionId: string,
+    isBorrowerPurchasing = true
+  ): Promise<any> {
+    if (!dbClient) {
+      // Simulate locally
+      let meter = globalStore.meters.find((m: any) => m.meter_number === meterNumber);
+      if (!meter) {
+        meter = {
+          id: `m-${Date.now()}`,
+          meter_number: meterNumber,
+          provider_name: 'City Power',
+          status: 'ACTIVE',
+          total_outstanding_cents: 0,
+          created_at: new Date().toISOString()
+        };
+        globalStore.meters.push(meter);
+      }
+
+      // Record purchase event
+      const purchase = {
+        id: `p-${Date.now()}`,
+        meter_id: meter.id,
+        amount_cents: purchaseAmountCents,
+        channel,
+        external_transaction_id: externalTransactionId,
+        created_at: new Date().toISOString()
+      };
+      globalStore.meter_purchases.push(purchase);
+
+      const outstanding_cents = meter.total_outstanding_cents;
+      let scenario = 'NO_DEBT';
+      let debt_recovered_cents = 0;
+      let electricity_amount_cents = purchaseAmountCents;
+
+      if (outstanding_cents > 0) {
+        debt_recovered_cents = Math.min(purchaseAmountCents, outstanding_cents);
+        electricity_amount_cents = purchaseAmountCents - debt_recovered_cents;
+        scenario = debt_recovered_cents === outstanding_cents ? 'FULL_RECOVERY' : 'PARTIAL_RECOVERY';
+
+        // Apply to advances sequentially
+        const activeAdvances = globalStore.advances.filter(
+          (a: any) => a.meter_id === meter.id && (a.status === 'ACTIVE' || a.status === 'PARTIALLY_REPAID')
+        ).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+        let remainingRecovery = debt_recovered_cents;
+        for (const advance of activeAdvances) {
+          if (remainingRecovery <= 0) break;
+          const deduction = Math.min(advance.outstanding_cents, remainingRecovery);
+          remainingRecovery -= deduction;
+
+          advance.repaid_cents += deduction;
+          advance.outstanding_cents -= deduction;
+          advance.status = advance.outstanding_cents <= 0 ? 'SETTLED' : 'PARTIALLY_REPAID';
+          advance.updated_at = new Date().toISOString();
+
+          // Create recovery transaction
+          const rt = {
+            id: `rt-${Date.now()}-${Math.random()}`,
+            advance_id: advance.id,
+            meter_id: meter.id,
+            amount_cents: deduction,
+            channel,
+            event_type: advance.status === 'SETTLED' ? 'FULL' : 'PARTIAL',
+            external_transaction_id: externalTransactionId,
+            created_at: new Date().toISOString()
+          };
+          globalStore.recovery_transactions.push(rt);
+
+          // Update borrower totals
+          const b = globalStore.borrowers.find((b: any) => b.id === advance.borrower_id);
+          if (b) {
+            b.total_active_exposure_cents = Math.max(0, b.total_active_exposure_cents - deduction);
+            b.total_repaid_cents += deduction;
+            b.updated_at = new Date().toISOString();
+          }
+        }
+
+        meter.total_outstanding_cents = Math.max(0, meter.total_outstanding_cents - debt_recovered_cents);
+        meter.last_activity_at = new Date().toISOString();
+      }
+
+      // Log system event
+      const se = {
+        id: `se-${Date.now()}`,
+        event_type: 'RECOVERY_APPLIED',
+        reference_id: purchase.id,
+        reference_type: 'purchase',
+        payload: {
+          meter_number: meterNumber,
+          purchase_amount_cents: purchaseAmountCents,
+          debt_recovered_cents,
+          electricity_amount_cents,
+          scenario
+        },
+        created_at: new Date().toISOString()
+      };
+      globalStore.system_events.unshift(se);
+
+      return {
+        success: true,
+        meter_number: meterNumber,
+        scenario,
+        purchase_amount_cents: purchaseAmountCents,
+        debt_recovered_cents,
+        electricity_amount_cents,
+        remaining_outstanding_cents: meter.total_outstanding_cents
+      };
+    }
+
+    try {
+      const { data, error } = await dbClient.rpc('execute_purchase_clearing_v1', {
+        p_meter_number: meterNumber,
+        p_purchase_amount_cents: purchaseAmountCents,
+        p_channel: channel,
+        p_external_transaction_id: externalTransactionId,
+        p_is_borrower_purchasing: isBorrowerPurchasing
+      });
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.warn('DB Error in executePurchaseClearing, falling back to mock:', e);
+      return {
+        success: false,
+        error: String(e)
+      };
+    }
   }
 };

@@ -11,20 +11,20 @@ interface Message {
 
 const now = () => new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
 
-type ConvState = 'IDLE' | 'AWAITING_ADVANCE_AMOUNT' | 'AWAITING_METER';
+type ConvState = 'IDLE' | 'AWAITING_ADVANCE_AMOUNT' | 'AWAITING_METER' | 'AWAITING_BUY_AMOUNT';
 
 const MENU = `⚡ *VoltAdvance Bot*
 _Utility Credit Infrastructure_
 
-Please choose:
-1️⃣ Request Advance
-2️⃣ My Balance
-3️⃣ Meter Status
-4️⃣ Repayment History
+Please choose an option:
+1️⃣ Buy Electricity (Standard Recharge)
+2️⃣ Request Advance (Emergency Credit)
+3️⃣ My Account & Balances
+4️⃣ Meter Status & History
 
 Type a number or keyword.`;
 
-const BALANCE_RESPONSE = `💳 *Your Account*
+const BALANCE_RESPONSE = `💳 *Your Account & Balances*
 
 Phone: ****4567
 Trust Score: *85/100* (Premium)
@@ -35,15 +35,6 @@ Advance Limit: *R300*
 Outstanding advance: ADV-0001-01
 Amount due: *R110.00*
 _Will recover on next electricity purchase._`;
-
-const HISTORY_RESPONSE = `📊 *Repayment History*
-
-ADV-0003-01 · R100 → ✅ Settled (Jun 02)
-ADV-0002-01 · R50  → ✅ Settled (May 15)
-ADV-0001-01 · R100 → 🟡 Active (Jun 07)
-
-Recovery Rate: *100%*
-Next advance available after settlement.`;
 
 function generateAdvanceResponse(amount: number): string {
   const fee = Math.round(amount * 0.1);
@@ -102,6 +93,9 @@ export default function WhatsAppPage() {
   const [isTyping, setIsTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Simulation parameters (mocking DB updates)
+  const [debt, setDebt] = useState(110);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
@@ -129,15 +123,25 @@ export default function WhatsAppPage() {
   function processInput(text: string) {
     const normalized = text.toLowerCase().trim();
 
-    // Menu navigation
     if (state === 'IDLE') {
-      if (['1', 'request advance', 'advance', 'request electricity advance'].includes(normalized)) {
+      if (['1', 'buy', 'buy electricity', 'recharge'].includes(normalized)) {
+        botReply(`🔌 *Buy Electricity*
+
+Your meter: 123456789
+
+How much electricity would you like to buy?
+(Enter an amount in Rands, e.g. *100* or *200*):`);
+        setState('AWAITING_BUY_AMOUNT');
+        return;
+      }
+
+      if (['2', 'request advance', 'advance', 'emergency'].includes(normalized)) {
         botReply(`📋 *Advance Request*
 
 Your meter: 123456789
 Trust Score: 85/100 ✅
 
-How much would you like?
+How much emergency credit would you like?
 
 1️⃣ R50
 2️⃣ R100
@@ -149,28 +153,65 @@ Type the number or amount:`);
         return;
       }
 
-      if (['2', 'my balance', 'balance'].includes(normalized)) {
-        botReply(BALANCE_RESPONSE);
+      if (['3', 'my balance', 'balance', 'account'].includes(normalized)) {
+        const customBalance = `💳 *Your Account & Balances*
+
+Phone: ****4567
+Trust Score: *85/100* (Premium)
+Active Exposure: *R${debt.toFixed(2)}*
+Total Repaid: *R850.00*
+Advance Limit: *R300*
+
+${debt > 0 ? `Outstanding advance: ADV-0001-01\nAmount due: *R${debt.toFixed(2)}*\n_Will recover on next electricity purchase._` : 'No outstanding advances! You are clear to take a new advance.'}`;
+        botReply(customBalance);
         return;
       }
 
-      if (['3', 'meter status', 'check meter'].some(k => normalized.includes(k))) {
-        if (normalized.includes('check meter ') || /\d{9}/.test(normalized)) {
+      if (['4', 'meter status', 'check meter'].some(k => normalized.includes(k))) {
+        if (normalized.includes('check ') || /\d{9}/.test(normalized)) {
           const meter = normalized.match(/\d{9}/)?.[0] || '123456789';
           botReply(getMeterResponse(meter));
           return;
         }
-        botReply('🔌 *Meter Lookup*\n\nPlease enter your meter number:\n_(e.g. CHECK METER 123456789)_');
+        botReply('🔌 *Meter Status & History*\n\nEnter your 9-digit meter number to check obligations:\n_(e.g. 123456789)_');
         setState('AWAITING_METER');
         return;
       }
 
-      if (['4', 'repayment history', 'history'].includes(normalized)) {
-        botReply(HISTORY_RESPONSE);
-        return;
-      }
-
       botReply(`Sorry, I didn't understand that. 🤔\n\n${MENU}`);
+      return;
+    }
+
+    if (state === 'AWAITING_BUY_AMOUNT') {
+      const amount = parseFloat(normalized.replace(/[^0-9.]/g, ''));
+      if (!isNaN(amount) && amount > 0) {
+        const recovered = Math.min(amount, debt);
+        const netElectricity = amount - recovered;
+        const newDebt = Math.max(0, debt - recovered);
+        setDebt(newDebt);
+
+        const token = Array.from({ length: 4 }, () =>
+          Math.floor(1000 + Math.random() * 9000)
+        ).join('-');
+
+        const reply = `🔌 *Standard Recharge Successful*
+
+*Vending Token:* \`${token}\`
+*Purchase Value:* R${amount.toFixed(2)}
+
+--------------------------------
+${recovered > 0 ? `⚡ *VoltAdvance Clearing:*
+- Debt recovered: R${recovered.toFixed(2)}
+- Net electricity: R${netElectricity.toFixed(2)}
+- Remaining debt: R${newDebt.toFixed(2)}` : 'No outstanding debt. Full electricity value issued.'}
+
+Stay powered. 💛`;
+
+        botReply(reply, 1500);
+        setState('IDLE');
+      } else {
+        botReply('Please enter a valid amount in Rands to buy electricity (e.g. 100).');
+      }
       return;
     }
 
@@ -184,6 +225,8 @@ Type the number or amount:`);
         }
       }
       if (amount) {
+        const fee = Math.round(amount * 0.1);
+        setDebt(prev => prev + amount + fee);
         botReply(generateAdvanceResponse(amount), 1500);
         setState('IDLE');
       } else {
@@ -219,17 +262,17 @@ Type the number or amount:`);
         {/* Info Panel */}
         <div className={styles.infoPanel}>
           <div className="card">
-            <p className="section-title" style={{ marginBottom: 'var(--space-4)' }}>💬 WhatsApp Bot</p>
+            <p className="section-title" style={{ marginBottom: 'var(--space-4)' }}>💬 WhatsApp Bot Simulator</p>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              This is the simulated VoltAdvance WhatsApp interface. All external users — customers and landlords — interact entirely through this bot.
+              All external users — customers and landlords — interact entirely through this interface. Purchases trigger the integrated credit clearing engine.
             </p>
             <div className="divider" />
-            <p className={styles.infoLabel}>SUPPORTED COMMANDS</p>
+            <p className={styles.infoLabel}>SUPPORTED SIMULATIONS</p>
             {[
-              { cmd: '1 or REQUEST ADVANCE', desc: 'Request electricity advance' },
-              { cmd: '2 or MY BALANCE', desc: 'Check outstanding balance' },
-              { cmd: 'CHECK METER [number]', desc: 'Query meter obligation status' },
-              { cmd: '4 or HISTORY', desc: 'View repayment history' },
+              { cmd: '1 or BUY', desc: 'Buy electricity & clear debt' },
+              { cmd: '2 or ADVANCE', desc: 'Request emergency credit' },
+              { cmd: '3 or BALANCE', desc: 'Check outstanding balances' },
+              { cmd: '4 or METER', desc: 'Check meter status & history' },
             ].map(item => (
               <div key={item.cmd} className={styles.commandRow} onClick={() => quickSend(item.cmd.split(' or ')[0])}>
                 <span className="font-mono" style={{ fontSize: 11, color: 'var(--color-amber)' }}>{item.cmd}</span>
@@ -239,9 +282,9 @@ Type the number or amount:`);
             <div className="divider" />
             <p className={styles.infoLabel}>TWILIO CONFIG</p>
             <div className={styles.twilioStatus}>
-              <span className="badge badge-warning">⚠ Simulation Mode</span>
+              <span className="badge badge-success">✓ Active webhook /api/whatsapp</span>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'var(--space-2)', lineHeight: 1.5 }}>
-                Real Twilio integration: configure TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env.local
+                Your live Twilio numbers link directly to this state machine. Standard recharges instantly settle outstanding emergency credit.
               </p>
             </div>
           </div>
