@@ -47,17 +47,76 @@ export async function POST(req: NextRequest) {
 
     let session = globalSessionMap.get(phone);
     if (!session) {
-      session = { state: 'IDLE', meterNumber: '123456789' };
+      session = { state: 'IDLE' };
       globalSessionMap.set(phone, session);
+    }
+
+    // Load active linked meter if not cached in session
+    if (!session.meterNumber) {
+      const linkedMeter = await db.getLinkedMeterForPhone(phone);
+      if (linkedMeter) {
+        session.meterNumber = linkedMeter.meter_number;
+      }
     }
 
     let replyText = '';
 
-    if (session.state === 'IDLE') {
+    if (!session.meterNumber && session.state !== 'AWAITING_METER_LINK') {
+      replyText = `🔌 *Welcome to VoltAdvance!* 👋
+_Utility Credit Infrastructure_
+
+Your phone number (${phone}) is not yet linked to an electricity meter.
+
+Please reply with your *9-digit prepaid meter number* to link your account:`;
+      session.state = 'AWAITING_METER_LINK';
+    } else if (session.state === 'AWAITING_METER_LINK') {
+      const parsedMeter = normalized.replace(/[^0-9]/g, '');
+      if (parsedMeter.length >= 6 && parsedMeter.length <= 12) {
+        // 1. Get or create borrower
+        let borrower = await db.getBorrowerByPhone(phone);
+        if (!borrower) {
+          borrower = await db.createBorrower({
+            phone_number: phone,
+            trust_score: 75,
+            risk_tier: 'STANDARD',
+            total_active_exposure_cents: 0,
+            total_repaid_cents: 0
+          });
+        }
+
+        // 2. Get or create meter
+        let meter = await db.getMeterByNumber(parsedMeter);
+        if (!meter) {
+          meter = await db.createMeter({
+            meter_number: parsedMeter,
+            provider_name: 'City Power',
+            status: 'ACTIVE'
+          });
+        }
+
+        // 3. Link them
+        await db.linkMeterToBorrower(borrower.id, meter.id);
+
+        session.meterNumber = meter.meter_number;
+        session.state = 'IDLE';
+
+        replyText = `✅ *Meter Linked Successfully!*
+
+Your phone is now linked to meter *${meter.meter_number}*.
+
+${MENU}`;
+      } else {
+        replyText = `⚠️ *Invalid Meter Number*
+
+Prepaid meter numbers should be between 6 and 12 digits (usually 9 digits).
+
+Please type your meter number again:`;
+      }
+    } else if (session.state === 'IDLE') {
       if (['1', 'buy', 'buy electricity', 'recharge'].includes(normalized)) {
         replyText = `🔌 *Buy Electricity*
 
-Your meter: ${session.meterNumber || '123456789'}
+Your meter: ${session.meterNumber}
 
 How much electricity would you like to buy?
 (Enter an amount in Rands, e.g. *100* or *200*):`;
@@ -65,7 +124,7 @@ How much electricity would you like to buy?
       } else if (['2', 'request advance', 'advance', 'emergency'].includes(normalized)) {
         replyText = `📋 *Advance Request*
 
-Your meter: ${session.meterNumber || '123456789'}
+Your meter: ${session.meterNumber}
 Trust Score: 85/100 ✅
 
 How much emergency credit would you like?

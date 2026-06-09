@@ -18,7 +18,16 @@ const globalStore = (global as any)._mockDbStore || {
   advances: [...mock.mockAdvances],
   recovery_transactions: [...mock.mockRecoveryTransactions],
   system_events: [...mock.mockSystemEvents],
-  meter_purchases: [...mock.mockMeterPurchases]
+  meter_purchases: [...mock.mockMeterPurchases],
+  meter_borrower_links: mock.mockAdvances.map((a: any, idx: number) => ({
+    id: `l-seed-${idx}`,
+    meter_id: a.meter_id,
+    borrower_id: a.borrower_id,
+    relationship_type: 'USER',
+    active: true,
+    active_from: new Date().toISOString(),
+    last_seen_at: new Date().toISOString()
+  }))
 };
 
 if (process.env.NODE_ENV !== 'production') {
@@ -40,6 +49,99 @@ export const db = {
     } catch (e) {
       console.warn('DB Error in getBorrowerByPhone, falling back to mock:', e);
       return globalStore.borrowers.find((b: any) => b.phone_number === phone) || null;
+    }
+  },
+
+  async getLinkedMeterForPhone(phone: string): Promise<Meter | null> {
+    if (!dbClient) {
+      // Find borrower first
+      const borrower = globalStore.borrowers.find((b: any) => b.phone_number === phone);
+      if (!borrower) return null;
+      // Find active link
+      const link = globalStore.meter_borrower_links?.find(
+        (l: any) => l.borrower_id === borrower.id && l.active === true
+      );
+      if (!link) return null;
+      return globalStore.meters.find((m: any) => m.id === link.meter_id) || null;
+    }
+    try {
+      const borrower = await this.getBorrowerByPhone(phone);
+      if (!borrower) return null;
+
+      const { data: link, error: linkErr } = await dbClient
+        .from('meter_borrower_links')
+        .select('meter_id')
+        .eq('borrower_id', borrower.id)
+        .eq('active', true)
+        .maybeSingle();
+      if (linkErr) throw linkErr;
+      if (!link) return null;
+
+      const { data: meter, error: meterErr } = await dbClient
+        .from('meters')
+        .select('*')
+        .eq('id', link.meter_id)
+        .single();
+      if (meterErr) throw meterErr;
+      return meter;
+    } catch (e) {
+      console.warn('DB Error in getLinkedMeterForPhone:', e);
+      return null;
+    }
+  },
+
+  async linkMeterToBorrower(borrowerId: string, meterId: string): Promise<any> {
+    const newLink = {
+      id: `l-${Date.now()}`,
+      meter_id: meterId,
+      borrower_id: borrowerId,
+      relationship_type: 'USER',
+      active: true,
+      active_from: new Date().toISOString(),
+      last_seen_at: new Date().toISOString()
+    };
+    if (!dbClient) {
+      if (!globalStore.meter_borrower_links) {
+        globalStore.meter_borrower_links = [];
+      }
+      // Deactivate existing
+      globalStore.meter_borrower_links.forEach((l: any) => {
+        if (l.borrower_id === borrowerId) l.active = false;
+      });
+      globalStore.meter_borrower_links.push(newLink);
+      return newLink;
+    }
+    try {
+      // Deactivate any existing active link for this borrower
+      await dbClient
+        .from('meter_borrower_links')
+        .update({ active: false, active_to: new Date().toISOString() })
+        .eq('borrower_id', borrowerId)
+        .eq('active', true);
+
+      // Insert new link
+      const { data, error } = await dbClient
+        .from('meter_borrower_links')
+        .insert({
+          meter_id: meterId,
+          borrower_id: borrowerId,
+          relationship_type: 'USER',
+          active: true
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.warn('DB Error in linkMeterToBorrower, falling back to mock:', e);
+      if (!globalStore.meter_borrower_links) {
+        globalStore.meter_borrower_links = [];
+      }
+      globalStore.meter_borrower_links.forEach((l: any) => {
+        if (l.borrower_id === borrowerId) l.active = false;
+      });
+      globalStore.meter_borrower_links.push(newLink);
+      return newLink;
     }
   },
 
