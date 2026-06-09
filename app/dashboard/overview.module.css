@@ -1,0 +1,127 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-4);
+}
+
+@media (max-width: 1400px) { .metricsGrid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px) { .metricsGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .metricsGrid { grid-template-columns: 1fr; } }
+
+.chartsRow {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--space-4);
+}
+
+@media (max-width: 1100px) { .chartsRow { grid-template-columns: 1fr; } }
+
+.chartCard {
+  min-width: 0;
+}
+
+.riskCard {
+  display: flex;
+  flex-direction: column;
+}
+
+.donutRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 110px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legendLabel {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.legendValue {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Chart Tooltip ─── */
+.chartTooltip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: 12px;
+}
+
+.tooltipLabel {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+/* ─── Transaction Stream ─── */
+.eventStream {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.eventRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.eventRow:last-child { border-bottom: none; }
+
+.eventTime {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 56px;
+  flex-shrink: 0;
+}
+
+.eventPayload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.payloadChip {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}

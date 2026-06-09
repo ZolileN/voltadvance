@@ -1,0 +1,214 @@
+.page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+.infoPanel { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.infoLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: var(--space-2);
+}
+
+.commandRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.commandRow:hover {
+  border-color: var(--border-amber);
+  background: var(--color-amber-glow);
+}
+
+.twilioStatus { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* ─── Phone Frame ─── */
+.phoneWrap {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.phone {
+  background: #111B21;
+  border-radius: 32px;
+  border: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+  display: flex;
+  flex-direction: column;
+}
+
+.statusBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 20px;
+  background: #0A1014;
+  font-size: 12px;
+  color: #8696a0;
+}
+
+.waHeader {
+  background: #1F2C34;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.waAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-amber), #FFD700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.waName { font-size: 15px; font-weight: 600; color: #e9edef; }
+.waStatus { font-size: 11px; color: #8696a0; margin-top: 1px; }
+
+.chat {
+  flex: 1;
+  background: #0B141A;
+  min-height: 400px;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dateLabel {
+  text-align: center;
+  font-size: 11px;
+  color: #8696a0;
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 4px 12px;
+  align-self: center;
+  margin-bottom: 4px;
+}
+
+.bubble {
+  max-width: 88%;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.bubbleBot {
+  background: #1F2C34;
+  border-radius: 0 8px 8px 8px;
+  align-self: flex-start;
+}
+
+.bubbleUser {
+  background: #005C4B;
+  border-radius: 8px 8px 0 8px;
+  align-self: flex-end;
+}
+
+.bubbleText {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: #e9edef;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubbleTime {
+  display: block;
+  font-size: 10px;
+  color: #8696a0;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+}
+
+.typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8696a0;
+  animation: bounce 1.2s infinite;
+}
+
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+.inputRow {
+  background: #1F2C34;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.chatInput {
+  flex: 1;
+  background: #2A3942;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 16px;
+  color: #e9edef;
+  font-size: 14px;
+  outline: none;
+}
+
+.chatInput::placeholder { color: #8696a0; }
+
+.sendBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #00A884;
+  color: white;
+  font-size: 16px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sendBtn:hover:not(:disabled) { background: #00c899; }
+.sendBtn:disabled { background: #2A3942; color: #8696a0; cursor: not-allowed; }
