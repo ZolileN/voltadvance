@@ -3,9 +3,9 @@ import { evaluateRisk, scoreTierLabel } from '@/lib/risk-engine';
 import { db } from '@/lib/db';
 
 // Persist session state across hot reloads in development
-const globalSessionMap = (global as any)._whatsappSessions || new Map<string, { state: string; meterNumber?: string }>();
+const globalSessionMap = (globalThis as unknown as { _whatsappSessions?: Map<string, { state: string; meterNumber?: string }> })._whatsappSessions || new Map<string, { state: string; meterNumber?: string }>();
 if (process.env.NODE_ENV !== 'production') {
-  (global as any)._whatsappSessions = globalSessionMap;
+  (globalThis as unknown as { _whatsappSessions?: Map<string, { state: string; meterNumber?: string }> })._whatsappSessions = globalSessionMap;
 }
 
 const MENU = `⚡ *VoltAdvance Bot*
@@ -221,24 +221,40 @@ ${outstandingRands > 0 ? `Outstanding advance balance: *R${outstandingRands.toFi
       const parsedAmount = parseFloat(normalized.replace(/[^0-9.]/g, ''));
       if (!isNaN(parsedAmount) && parsedAmount > 0) {
         const purchase_cents = Math.round(parsedAmount * 100);
-        
-        // Execute dynamic clearing engine transaction
-        const clearing = await db.executePurchaseClearing(
-          session.meterNumber || '123456789',
-          purchase_cents,
-          'WHATSAPP',
-          `WA-${Date.now()}`
-        );
+        const meterNumber = session.meterNumber || '123456789';
 
-        const token = Array.from({ length: 4 }, () =>
-          Math.floor(1000 + Math.random() * 9000)
-        ).join('-');
+        const meter = await db.getMeterByNumber(meterNumber);
 
-        const recovered_rands = clearing.debt_recovered_cents / 100;
-        const electricity_rands = clearing.electricity_amount_cents / 100;
-        const remaining_rands = clearing.remaining_outstanding_cents / 100;
+        if (meter && meter.vending_integration_type === 'PASSTHROUGH_ONLY') {
+          // Pass-Through payment flow: generate a simulated payment checkout url
+          const checkoutUrl = `/api/v1/payments/checkout?meter=${meterNumber}&amount=${purchase_cents}`;
+          replyText = `🔌 *Municipal Pass-Through Recharge*
 
-        replyText = `🔌 *Standard Recharge Successful*
+Your meter *${meterNumber}* is on the municipal pass-through grid.
+
+To complete your purchase of *R${parsedAmount.toFixed(2)}*, please pay using this secure digital payment link to clear obligations:
+🔗 [Secure Checkout](${checkoutUrl})
+
+Once paid, your electricity token will be issued automatically.`;
+          session.state = 'IDLE';
+        } else {
+          // Switch-Intercept: Execute clearing immediately (50% Split Rule applied)
+          const clearing = await db.executePurchaseClearing(
+            meterNumber,
+            purchase_cents,
+            'WHATSAPP',
+            `WA-${Date.now()}`
+          );
+
+          const token = Array.from({ length: 4 }, () =>
+            Math.floor(1000 + Math.random() * 9000)
+          ).join('-');
+
+          const recovered_rands = clearing.debt_recovered_cents / 100;
+          const electricity_rands = clearing.electricity_amount_cents / 100;
+          const remaining_rands = clearing.remaining_outstanding_cents / 100;
+
+          replyText = `🔌 *Standard Recharge Successful*
 
 *Vending Token:* \`${token}\`
 *Purchase Value:* R${parsedAmount.toFixed(2)}
@@ -250,7 +266,8 @@ ${clearing.debt_recovered_cents > 0 ? `⚡ *VoltAdvance Clearing:*
 - Remaining debt: R${remaining_rands.toFixed(2)}` : 'No outstanding debt. Full electricity value issued.'}
 
 Stay powered. 💛`;
-        session.state = 'IDLE';
+          session.state = 'IDLE';
+        }
       } else {
         replyText = 'Please enter a valid amount in Rands to buy electricity (e.g. 100).';
       }
@@ -373,7 +390,7 @@ Stay powered. 💛`;
     return new NextResponse(xml, {
       headers: { 'Content-Type': 'text/xml' },
     });
-  } catch (e: any) {
+  } catch (e) {
     console.error('WhatsApp Bot webhook error:', e);
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

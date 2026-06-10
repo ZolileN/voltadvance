@@ -22,9 +22,11 @@ export function calculateRecovery(input: RecoveryInput): RecoveryResult {
     };
   }
 
-  // Scenario A: Borrower purchases electricity directly
-  if (is_borrower_purchasing && consent_granted) {
-    const recovered = Math.min(outstanding_cents, purchase_amount_cents);
+  // Scenario A & B: Borrower or Third-Party purchases electricity directly under consent agreement
+  // The Recovery Split Rule caps debt recovery at a maximum of 50% of the gross incoming purchase value
+  if (consent_granted) {
+    const recoveryCap = Math.floor(purchase_amount_cents * 0.5);
+    const recovered = Math.min(outstanding_cents, recoveryCap);
     const electricity = purchase_amount_cents - recovered;
     const newOutstanding = outstanding_cents - recovered;
     const status: AdvanceStatus = newOutstanding <= 0 ? 'SETTLED' : 'PARTIALLY_REPAID';
@@ -34,28 +36,11 @@ export function calculateRecovery(input: RecoveryInput): RecoveryResult {
       debt_recovered_cents: recovered,
       electricity_amount_cents: electricity,
       advance_status: status,
-      scenario: 'BORROWER',
+      scenario: is_borrower_purchasing ? 'BORROWER' : 'THIRD_PARTY',
     };
   }
 
-  // Scenario B: Third-party purchases electricity (landlord, family member)
-  // Meter-level recovery still applies under consent agreement
-  if (!is_borrower_purchasing && consent_granted) {
-    const recovered = Math.min(outstanding_cents, purchase_amount_cents);
-    const electricity = purchase_amount_cents - recovered;
-    const newOutstanding = outstanding_cents - recovered;
-    const status: AdvanceStatus = newOutstanding <= 0 ? 'SETTLED' : 'PARTIALLY_REPAID';
-
-    return {
-      purchase_amount_cents,
-      debt_recovered_cents: recovered,
-      electricity_amount_cents: electricity,
-      advance_status: status,
-      scenario: 'THIRD_PARTY',
-    };
-  }
-
-  // No consent — allow purchase but flag for escalation
+  // No consent — allow purchase but recovery is 0
   return {
     purchase_amount_cents,
     debt_recovered_cents: 0,

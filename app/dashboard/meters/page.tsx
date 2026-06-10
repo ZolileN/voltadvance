@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import styles from './meters.module.css';
 
+import { Meter } from '@/lib/types';
+
 function formatCents(c: number) {
   return `R ${(c / 100).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
 }
@@ -24,7 +26,7 @@ function timeSince(dateStr?: string) {
 }
 
 export default function MetersPage() {
-  const [meters, setMeters] = useState<any[]>([]);
+  const [meters, setMeters] = useState<Meter[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -102,7 +104,12 @@ export default function MetersPage() {
                 <span className={`badge ${statusBadge(meter.status)}`}>{meter.status}</span>
               </div>
 
-              <div className={styles.meterProvider}>{meter.provider_name || 'Unknown Provider'}</div>
+              <div className={styles.meterProvider} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{meter.provider_name || 'Unknown Provider'}</span>
+                <span className="badge" style={{ fontSize: '9px', padding: '2px 6px', background: meter.vending_integration_type === 'SWITCH_INTERCEPT' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.15)', color: meter.vending_integration_type === 'SWITCH_INTERCEPT' ? 'var(--color-amber)' : 'var(--text-secondary)' }}>
+                  {meter.vending_integration_type === 'SWITCH_INTERCEPT' ? '⛓️ INTERCEPT' : '🔌 PASS-THROUGH'}
+                </span>
+              </div>
 
               <div className={styles.meterStats}>
                 <div className={styles.meterStat}>
@@ -112,6 +119,12 @@ export default function MetersPage() {
                   }}>
                     {meter.total_outstanding_cents > 0 ? formatCents(meter.total_outstanding_cents) : 'Clear'}
                   </span>
+                </div>
+                <div className={styles.meterStat}>
+                  <span className={styles.statLabel}>Clearing</span>
+                  <span className={styles.statVal} style={{
+                    color: meter.clearing_status === 'NOMINAL' ? 'var(--color-success)' : 'var(--color-warning)'
+                  }}>{meter.clearing_status || 'NOMINAL'}</span>
                 </div>
                 <div className={styles.meterStat}>
                   <span className={styles.statLabel}>Last Activity</span>
