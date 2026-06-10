@@ -11,15 +11,25 @@ export async function GET(req: NextRequest) {
   try {
     const borrower = await db.getBorrowerByPhone(phone);
     
+    const digits = phone.replace(/[^0-9]/g, '');
+    let sum = 0;
+    for (let i = 0; i < digits.length; i++) {
+      sum += parseInt(digits[i], 10) || 0;
+    }
+    
+    const advancesTaken = borrower && borrower.total_repaid_cents > 0 
+      ? Math.max(1, Math.round(borrower.total_repaid_cents / 10000)) 
+      : 0;
+
     // Evaluate risk based on actual database profile or a clean baseline for new users
     const evaluation = evaluateRisk({
       phone_number: phone,
-      meter_age_days: 365,
-      purchase_frequency_per_month: 4,
-      average_purchase_cents: 15000,
-      advances_taken: borrower ? Math.round(borrower.total_repaid_cents / 10000) : 0,
-      advances_repaid: borrower ? Math.round(borrower.total_repaid_cents / 10000) : 0,
-      time_to_repayment_days: 5,
+      meter_age_days: 180 + (sum % 360),
+      purchase_frequency_per_month: 3 + (sum % 4),
+      average_purchase_cents: 8000 + (sum % 12000),
+      advances_taken: advancesTaken,
+      advances_repaid: advancesTaken,
+      time_to_repayment_days: 3 + (sum % 5),
       current_outstanding_cents: borrower ? borrower.total_active_exposure_cents : 0,
       linked_phone_count: 1,
       suspicious_patterns: false,

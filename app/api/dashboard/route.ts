@@ -52,6 +52,11 @@ export async function GET() {
     ];
 
     // 9. Dynamic Advance Volume vs Recovery Chart
+    const todayDate = new Date();
+    const formatTrendDate = (d: Date) => {
+      return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).replace(' ', ' ');
+    };
+
     const dynamicVolume = [
       { date: 'May 10', amount: 8000, recovered: 7500 },
       { date: 'May 13', amount: 15000, recovered: 14200 },
@@ -63,26 +68,23 @@ export async function GET() {
       { date: 'May 31', amount: 31000, recovered: 29800 },
       { date: 'Jun 02', amount: 19500, recovered: 18900 },
       { date: 'Jun 05', amount: 28000, recovered: 27200 },
-      { date: 'Jun 07', amount: 35000, recovered: 33500 },
-      { date: 'Jun 09', amount: 0, recovered: 0 },
+      { date: 'Jun 08', amount: 35000, recovered: 33500 },
+      { date: formatTrendDate(todayDate), amount: 0, recovered: 0 },
     ];
 
     // Add live advances (summed in Rands)
     for (const a of advances) {
-      // Exclude base seed advances already in baseline if needed,
-      // but since they have different IDs/times we can just check dates.
-      // E.g. newly created advances will fall on Jun 09.
       const date = new Date(a.created_at);
-      const dayStr = date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).replace(' ', ' ');
+      const dayStr = formatTrendDate(date);
       const match = dynamicVolume.find(b => b.date.toLowerCase() === dayStr.toLowerCase());
       if (match) {
-        // Only add dynamic additions (not base seed data already reflected in historical charts)
-        if (a.created_at.startsWith('2026-06-09')) {
+        // Only add dynamic additions from today (to prevent double counting historical seeds)
+        if (a.created_at.startsWith(todayStr)) {
           match.amount += a.principal_cents / 100;
         }
       } else {
-        const todayBucket = dynamicVolume.find(b => b.date === 'Jun 09');
-        if (todayBucket && a.created_at.startsWith('2026-06-09')) {
+        const todayBucket = dynamicVolume.find(b => b.date === formatTrendDate(todayDate));
+        if (todayBucket && a.created_at.startsWith(todayStr)) {
           todayBucket.amount += a.principal_cents / 100;
         }
       }
@@ -91,15 +93,15 @@ export async function GET() {
     // Add live recovery payments
     for (const r of recoveryTxs) {
       const date = new Date(r.created_at);
-      const dayStr = date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }).replace(' ', ' ');
+      const dayStr = formatTrendDate(date);
       const match = dynamicVolume.find(b => b.date.toLowerCase() === dayStr.toLowerCase());
       if (match) {
-        if (r.created_at.startsWith('2026-06-09')) {
+        if (r.created_at.startsWith(todayStr)) {
           match.recovered += r.amount_cents / 100;
         }
       } else {
-        const todayBucket = dynamicVolume.find(b => b.date === 'Jun 09');
-        if (todayBucket && r.created_at.startsWith('2026-06-09')) {
+        const todayBucket = dynamicVolume.find(b => b.date === formatTrendDate(todayDate));
+        if (todayBucket && r.created_at.startsWith(todayStr)) {
           todayBucket.recovered += r.amount_cents / 100;
         }
       }
