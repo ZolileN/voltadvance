@@ -1,7 +1,7 @@
 import { Borrower, Meter, Advance, RecoveryTransaction, MeterPurchase, SystemEvent, DashboardMetrics } from './types';
 
 // ─────────────────────────────────────────────────────────
-// MOCK SEED DATA — VoltAdvance MVP
+// MOCK SEED DATA — VoltAdvance v3.0
 // All amounts in cents (R1 = 100 cents)
 // ─────────────────────────────────────────────────────────
 
@@ -40,34 +40,40 @@ export const mockBorrowers: Borrower[] = [
 
 export const mockMeters: Meter[] = [
   {
-    id: 'm1', meter_number: '123456789', provider_name: 'City Power',
-    status: 'ACTIVE', total_outstanding_cents: 11000,
-    last_activity_at: '2026-06-08T14:22:00Z', created_at: '2025-08-15T00:00:00Z',
+    id: 'm1', meter_number: '123456789', provider_name: 'Netvendor Switch',
+    status: 'ACTIVE', vending_integration_type: 'SWITCH_INTERCEPT', clearing_status: 'NOMINAL',
+    total_outstanding_cents: 11000,
+    last_activity_at: '2026-06-08T14:22:00Z', created_at: '2025-08-15T00:00:00Z', updated_at: '2025-08-15T00:00:00Z',
   },
   {
-    id: 'm2', meter_number: '987654321', provider_name: 'Eskom',
-    status: 'ACTIVE', total_outstanding_cents: 5000,
-    last_activity_at: '2026-06-07T09:45:00Z', created_at: '2025-10-01T00:00:00Z',
+    id: 'm2', meter_number: '987654321', provider_name: 'Metro Prepaid Switch',
+    status: 'ACTIVE', vending_integration_type: 'SWITCH_INTERCEPT', clearing_status: 'NOMINAL',
+    total_outstanding_cents: 5000,
+    last_activity_at: '2026-06-07T09:45:00Z', created_at: '2025-10-01T00:00:00Z', updated_at: '2025-10-01T00:00:00Z',
   },
   {
-    id: 'm3', meter_number: '555100200', provider_name: 'City Power',
-    status: 'ACTIVE', total_outstanding_cents: 0,
-    last_activity_at: '2026-06-09T07:12:00Z', created_at: '2025-06-20T00:00:00Z',
+    id: 'm3', meter_number: '555100200', provider_name: 'Netvendor Switch',
+    status: 'ACTIVE', vending_integration_type: 'SWITCH_INTERCEPT', clearing_status: 'NOMINAL',
+    total_outstanding_cents: 0,
+    last_activity_at: '2026-06-09T07:12:00Z', created_at: '2025-06-20T00:00:00Z', updated_at: '2025-06-20T00:00:00Z',
   },
   {
-    id: 'm4', meter_number: '777300400', provider_name: 'Eskom',
-    status: 'FLAGGED', total_outstanding_cents: 10000,
-    last_activity_at: '2026-06-01T18:00:00Z', created_at: '2026-03-01T00:00:00Z',
+    id: 'm4', meter_number: '777300400', provider_name: 'Emthanjeni Municipality',
+    status: 'FLAGGED', vending_integration_type: 'PASSTHROUGH_ONLY', clearing_status: 'NOMINAL',
+    total_outstanding_cents: 10000,
+    last_activity_at: '2026-06-01T18:00:00Z', created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z',
   },
   {
-    id: 'm5', meter_number: '444200100', provider_name: 'Buffalo City',
-    status: 'ACTIVE', total_outstanding_cents: 30000,
-    last_activity_at: '2026-06-09T11:30:00Z', created_at: '2025-09-12T00:00:00Z',
+    id: 'm5', meter_number: '444200100', provider_name: 'Eskom Grid',
+    status: 'ACTIVE', vending_integration_type: 'PASSTHROUGH_ONLY', clearing_status: 'NOMINAL',
+    total_outstanding_cents: 30000,
+    last_activity_at: '2026-06-09T11:30:00Z', created_at: '2025-09-12T00:00:00Z', updated_at: '2025-09-12T00:00:00Z',
   },
   {
-    id: 'm6', meter_number: '333500600', provider_name: 'eThekwini',
-    status: 'INACTIVE', total_outstanding_cents: 0,
-    last_activity_at: '2026-05-20T08:00:00Z', created_at: '2025-12-01T00:00:00Z',
+    id: 'm6', meter_number: '333500600', provider_name: 'eThekwini Grid',
+    status: 'INACTIVE', vending_integration_type: 'PASSTHROUGH_ONLY', clearing_status: 'NOMINAL',
+    total_outstanding_cents: 0,
+    last_activity_at: '2026-05-20T08:00:00Z', created_at: '2025-12-01T00:00:00Z', updated_at: '2025-12-01T00:00:00Z',
   },
 ];
 

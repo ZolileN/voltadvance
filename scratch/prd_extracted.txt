@@ -1,0 +1,12 @@
+<USER_REQUEST>
+as a Senior developer here are the new updates "PRODUCT REQUIREMENTS DOCUMENT (PRD)
+1. Document Control & Metadata
+Product Name: VoltAdvance
+Domain: Utility Credit Clearing & Settlement Infrastructure
+Version: 3.0 (Infrastructure-Intercept Architecture Focus)
+Author: Zolile Jackson Nonzapa
+Target Environment: Next.js (App Router), Supabase (PostgreSQL), Edge Functions, WhatsApp Conversational Engine (Twilio/Turn.io)
+2. Executive Summary
+VoltAdvance is a niche, utility-grade credit clearing network that decouples a borrower's mobile identity (MSISDN) from the physical infrastructure asset (the prepaid electricity meter).
+The platform sits directly inside the transaction stream of private sub-metering providers and municipal integrators via real-time webhooks. This position allows it to enforce automated debt recovery from future electricity purchases, regardless of the channel (banking apps, retail tills, or informal spaza shops) used by the tenant.
+<truncated 12515 bytes>

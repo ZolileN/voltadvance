@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       remaining_outstanding_cents: result.remaining_outstanding_cents,
       message,
     });
-  } catch (e: any) {
+  } catch (e) {
     console.error('Settlement routing error:', e);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

@@ -35,12 +35,12 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export const db = {
-  // --- BORROWERS ---
+  // --- DEBT OBLIGORS (BORROWERS) ---
   async getBorrowerByPhone(phone: string): Promise<Borrower | null> {
     if (!dbClient) return globalStore.borrowers.find((b: any) => b.phone_number === phone) || null;
     try {
       const { data, error } = await dbClient
-        .from('borrowers')
+        .from('debt_obligors')
         .select('*')
         .eq('phone_number', phone)
         .maybeSingle();
@@ -69,7 +69,7 @@ export const db = {
       if (!borrower) return null;
 
       const { data: link, error: linkErr } = await dbClient
-        .from('meter_borrower_links')
+        .from('utility_obligation_maps')
         .select('meter_id')
         .eq('borrower_id', borrower.id)
         .eq('active', true)
@@ -78,7 +78,7 @@ export const db = {
       if (!link) return null;
 
       const { data: meter, error: meterErr } = await dbClient
-        .from('meters')
+        .from('physical_meters')
         .select('*')
         .eq('id', link.meter_id)
         .single();
@@ -114,14 +114,14 @@ export const db = {
     try {
       // Deactivate any existing active link for this borrower
       await dbClient
-        .from('meter_borrower_links')
+        .from('utility_obligation_maps')
         .update({ active: false, active_to: new Date().toISOString() })
         .eq('borrower_id', borrowerId)
         .eq('active', true);
 
       // Insert new link
       const { data, error } = await dbClient
-        .from('meter_borrower_links')
+        .from('utility_obligation_maps')
         .insert({
           meter_id: meterId,
           borrower_id: borrowerId,
@@ -149,7 +149,7 @@ export const db = {
     if (!dbClient) return globalStore.borrowers;
     try {
       const { data, error } = await dbClient
-        .from('borrowers')
+        .from('debt_obligors')
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -173,7 +173,7 @@ export const db = {
     }
     try {
       const { data, error } = await dbClient
-        .from('borrowers')
+        .from('debt_obligors')
         .insert(borrower)
         .select()
         .single();
@@ -186,12 +186,12 @@ export const db = {
     }
   },
 
-  // --- METERS ---
+  // --- PHYSICAL METERS ---
   async getMeterByNumber(meterNumber: string): Promise<Meter | null> {
     if (!dbClient) return globalStore.meters.find((m: any) => m.meter_number === meterNumber) || null;
     try {
       const { data, error } = await dbClient
-        .from('meters')
+        .from('physical_meters')
         .select('*')
         .eq('meter_number', meterNumber)
         .maybeSingle();
@@ -207,7 +207,7 @@ export const db = {
     if (!dbClient) return globalStore.meters;
     try {
       const { data, error } = await dbClient
-        .from('meters')
+        .from('physical_meters')
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -218,13 +218,16 @@ export const db = {
     }
   },
 
-  async createMeter(meter: Omit<Meter, 'id' | 'created_at' | 'total_outstanding_cents' | 'last_activity_at'>): Promise<Meter> {
+  async createMeter(meter: Omit<Meter, 'id' | 'created_at' | 'updated_at' | 'total_outstanding_cents' | 'last_activity_at' | 'vending_integration_type' | 'clearing_status'> & Partial<Pick<Meter, 'vending_integration_type' | 'clearing_status'>>): Promise<Meter> {
     const newMeter = {
       ...meter,
       id: `m-${Date.now()}`,
+      vending_integration_type: meter.vending_integration_type || 'SWITCH_INTERCEPT',
+      clearing_status: meter.clearing_status || 'NOMINAL',
       total_outstanding_cents: 0,
       last_activity_at: new Date().toISOString(),
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     if (!dbClient) {
       globalStore.meters.push(newMeter);
@@ -232,7 +235,7 @@ export const db = {
     }
     try {
       const { data, error } = await dbClient
-        .from('meters')
+        .from('physical_meters')
         .insert(meter)
         .select()
         .single();
@@ -255,9 +258,8 @@ export const db = {
       return;
     }
     try {
-      // Fetch current outstanding
       const { data: meter, error: fetchErr } = await dbClient
-        .from('meters')
+        .from('physical_meters')
         .select('total_outstanding_cents')
         .eq('id', meterId)
         .single();
@@ -265,7 +267,7 @@ export const db = {
 
       const newBalance = Math.max(0, (meter?.total_outstanding_cents || 0) + outstandingDeltaCents);
       const { error: updateErr } = await dbClient
-        .from('meters')
+        .from('physical_meters')
         .update({
           total_outstanding_cents: newBalance,
           last_activity_at: new Date().toISOString()
@@ -293,7 +295,7 @@ export const db = {
     }
     try {
       const { data: borrower, error: fetchErr } = await dbClient
-        .from('borrowers')
+        .from('debt_obligors')
         .select('total_active_exposure_cents')
         .eq('id', borrowerId)
         .single();
@@ -301,7 +303,7 @@ export const db = {
 
       const newExposure = Math.max(0, (borrower?.total_active_exposure_cents || 0) + exposureDeltaCents);
       const { error: updateErr } = await dbClient
-        .from('borrowers')
+        .from('debt_obligors')
         .update({
           total_active_exposure_cents: newExposure,
           updated_at: new Date().toISOString()
@@ -318,12 +320,12 @@ export const db = {
     }
   },
 
-  // --- ADVANCES ---
+  // --- CREDIT ADVANCES ---
   async getAdvances(): Promise<Advance[]> {
     if (!dbClient) return globalStore.advances;
     try {
       const { data, error } = await dbClient
-        .from('advances')
+        .from('credit_advances')
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -340,7 +342,7 @@ export const db = {
     }
     try {
       const { data, error } = await dbClient
-        .from('advances')
+        .from('credit_advances')
         .select('*')
         .eq('meter_id', meterId)
         .in('status', ['ACTIVE', 'PARTIALLY_REPAID'])
@@ -366,7 +368,7 @@ export const db = {
     }
     try {
       const { data, error } = await dbClient
-        .from('advances')
+        .from('credit_advances')
         .insert(advance)
         .select()
         .single();
@@ -392,7 +394,7 @@ export const db = {
     }
     try {
       const { data: adv, error: fetchErr } = await dbClient
-        .from('advances')
+        .from('credit_advances')
         .select('repaid_cents, outstanding_cents')
         .eq('id', advanceId)
         .single();
@@ -402,7 +404,7 @@ export const db = {
       const newOutstanding = Math.max(0, (adv?.outstanding_cents || 0) - repaidDeltaCents);
 
       const { error: updateErr } = await dbClient
-        .from('advances')
+        .from('credit_advances')
         .update({
           repaid_cents: newRepaid,
           outstanding_cents: newOutstanding,
@@ -423,12 +425,12 @@ export const db = {
     }
   },
 
-  // --- RECOVERY ---
+  // --- RECOVERY (LEDGER JOURNAL ENTRIES) ---
   async getRecoveryTransactions(): Promise<RecoveryTransaction[]> {
     if (!dbClient) return globalStore.recovery_transactions;
     try {
       const { data, error } = await dbClient
-        .from('recovery_transactions')
+        .from('ledger_journal_entries')
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -451,7 +453,7 @@ export const db = {
     }
     try {
       const { data, error } = await dbClient
-        .from('recovery_transactions')
+        .from('ledger_journal_entries')
         .insert(txn)
         .select()
         .single();
@@ -505,11 +507,12 @@ export const db = {
     }
   },
 
+  // --- INTEGRATION INTERCEPT EVENTS (METER PURCHASES) ---
   async getMeterPurchases(): Promise<any[]> {
     if (!dbClient) return globalStore.meter_purchases;
     try {
       const { data, error } = await dbClient
-        .from('meter_purchases')
+        .from('integration_intercept_events')
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -520,6 +523,7 @@ export const db = {
     }
   },
 
+  // --- CLEARING EXECUTION ---
   async executePurchaseClearing(
     meterNumber: string,
     purchaseAmountCents: number,
@@ -536,8 +540,11 @@ export const db = {
           meter_number: meterNumber,
           provider_name: 'City Power',
           status: 'ACTIVE',
+          vending_integration_type: 'SWITCH_INTERCEPT',
+          clearing_status: 'NOMINAL',
           total_outstanding_cents: 0,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
         globalStore.meters.push(meter);
       }
@@ -559,7 +566,9 @@ export const db = {
       let electricity_amount_cents = purchaseAmountCents;
 
       if (outstanding_cents > 0) {
-        debt_recovered_cents = Math.min(purchaseAmountCents, outstanding_cents);
+        // Enforce 50% split cap
+        const maxRecovery = Math.floor(purchaseAmountCents * 0.5);
+        debt_recovered_cents = Math.min(outstanding_cents, maxRecovery);
         electricity_amount_cents = purchaseAmountCents - debt_recovered_cents;
         scenario = debt_recovered_cents === outstanding_cents ? 'FULL_RECOVERY' : 'PARTIAL_RECOVERY';
 
@@ -579,7 +588,7 @@ export const db = {
           advance.status = advance.outstanding_cents <= 0 ? 'SETTLED' : 'PARTIALLY_REPAID';
           advance.updated_at = new Date().toISOString();
 
-          // Create recovery transaction
+          // Create recovery transaction (ledger journal entry)
           const rt = {
             id: `rt-${Date.now()}-${Math.random()}`,
             advance_id: advance.id,

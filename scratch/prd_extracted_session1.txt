@@ -1,0 +1,17 @@
+<USER_REQUEST>
+You are the Senior developer for VoltAdvance, build this platform from start to finish "A PRD for this idea should be written as if you're building infrastructure, not a consumer app.
+The product is not "buy electricity on WhatsApp."
+The product is:
+A meter-centric utility advance and recovery network that automatically recovers advances from future electricity purchases regardless of where the purchase occurs.
+
+PRODUCT REQUIREMENTS DOCUMENT (PRD)
+Product Name
+Working Name: VoltAdvance
+Future Positioning:
+Utility Liquidity Infrastructure for Africa
+
+1. Executive Summary
+VoltAdvance enables prepaid electricity customers to receive small emergency electricity advances before payday.
+Unlike traditional lending solutions, advances are attached to the electricity meter rather than the individual customer.
+Repayment occurs automatically from the next electricity purchase regardless of where that purchase is made, provided the purchase flows through participating vending networks.
+<truncated 18611 bytes>

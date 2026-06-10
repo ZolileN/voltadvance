@@ -2,6 +2,25 @@
 import { useState, useEffect } from 'react';
 import { mockDashboardMetrics, advanceVolumeData, riskDistributionData, channelRecoveryData, mockSystemEvents } from '@/lib/mock-data';
 import styles from './overview.module.css';
+import { SystemEvent } from '@/lib/types';
+
+interface DashboardData {
+  metrics: {
+    total_outstanding_cents: number;
+    total_recovered_today_cents: number;
+    recovery_rate: number;
+    total_advances_issued: number;
+    active_meters: number;
+    default_rate: number;
+    fraud_alerts: number;
+  };
+  charts: {
+    advanceVolumeData: typeof advanceVolumeData;
+    riskDistributionData: typeof riskDistributionData;
+    channelRecoveryData: typeof channelRecoveryData;
+  };
+  events: SystemEvent[];
+}
 
 function formatCents(c: number) {
   return `R ${(c / 100).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
@@ -93,21 +112,21 @@ function AreaChart({ data }: { data: typeof advanceVolumeData }) {
 function DonutChart({ data }: { data: typeof riskDistributionData }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   const r = 60; const cx = 80; const cy = 80; const innerR = 36;
-  let angle = -90;
-
-  const slices = data.map(d => {
+  const slices = [];
+  let currentAngle = -90;
+  for (const d of data) {
     const sweep = (d.value / total) * 360;
-    const a1 = (angle * Math.PI) / 180;
-    const a2 = ((angle + sweep) * Math.PI) / 180;
+    const a1 = (currentAngle * Math.PI) / 180;
+    const a2 = ((currentAngle + sweep) * Math.PI) / 180;
     const x1 = cx + r * Math.cos(a1); const y1 = cy + r * Math.sin(a1);
     const x2 = cx + r * Math.cos(a2); const y2 = cy + r * Math.sin(a2);
     const ix1 = cx + innerR * Math.cos(a1); const iy1 = cy + innerR * Math.sin(a1);
     const ix2 = cx + innerR * Math.cos(a2); const iy2 = cy + innerR * Math.sin(a2);
     const lg = sweep > 180 ? 1 : 0;
     const path = `M ${x1} ${y1} A ${r} ${r} 0 ${lg} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${innerR} ${innerR} 0 ${lg} 0 ${ix1} ${iy1} Z`;
-    angle += sweep;
-    return { ...d, path };
-  });
+    slices.push({ ...d, path });
+    currentAngle += sweep;
+  }
 
   return (
     <div className={styles.donutRow}>
@@ -174,7 +193,7 @@ function LiveTicker({ target }: { target: number }) {
 }
 
 export default function DashboardPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -299,7 +318,7 @@ export default function DashboardPage() {
           </span>
         </div>
         <div className={styles.eventStream}>
-          {recentEvents.map((event: any) => {
+          {recentEvents.map((event: SystemEvent) => {
             const cfg = eventTypeConfig[event.event_type] || { badge: 'badge-neutral', label: event.event_type };
             return (
               <div key={event.id} className={styles.eventRow}>
