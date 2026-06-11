@@ -116,12 +116,31 @@ The operations workspace contains standard management layouts designed for mobil
 
 ---
 
-## ⏰ GitHub Actions: Keep Supabase Awake
+## ⏰ Keep-Awake Infrastructure (Supabase Free Tier)
 
-Because the application uses free-tier serverless PostgreSQL on Supabase, the project includes an automated cron scheduler in `.github/workflows/keep-awake.yml` to prevent database pausing during idle periods:
+Because the application uses free-tier serverless PostgreSQL on Supabase, the database will pause after 7 days of inactivity. To prevent this, three alternative keep-awake options are provided:
 
-* **Cron Schedule**: Runs at `09:00 AM UTC` every Monday and Thursday.
-* **API Ping**: Sends a REST API GET ping directly to the Supabase endpoint using secure credentials stored in GitHub Secrets.
+### Option A: Supabase Native pg_cron (Recommended)
+You can run a scheduled cron job directly inside your PostgreSQL database. This is serverless, 100% free, and requires no external runners.
+1. Open your Supabase Dashboard and go to the **SQL Editor**.
+2. Run the commands in [keep-awake-cron.sql](file:///home/zolile/Documents/voltadvance/supabase/keep-awake-cron.sql) to enable `pg_cron` and schedule a heartbeat query every 3 days.
+
+### Option B: Vercel Cron (Serverless API Ping)
+If the Next.js app is hosted on Vercel:
+- The `/api/cron/keep-alive` endpoint executes a lightweight query.
+- The cron schedule in `vercel.json` calls this endpoint every 3 days.
+- Secure the route by setting a `CRON_SECRET` environment variable in Vercel.
+
+### Option C: Local or VPS Script (cron/systemd)
+Run a script locally or on a server to ping either Supabase or the Next.js API route:
+1. Navigate to the project root and run:
+   ```bash
+   node scripts/keep-awake.mjs
+   ```
+2. Schedule this script in your server's `crontab` to run every 3 days:
+   ```text
+   0 9 *\/3 * * /usr/bin/node /path/to/voltadvance/scripts/keep-awake.mjs >> /path/to/voltadvance/keep-awake.log 2>&1
+   ```
 
 ---
 
